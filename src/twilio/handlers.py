@@ -1,8 +1,9 @@
 import json
 import base64
 import logging
-from typing import Dict
+from typing import Dict, Optional
 from fastapi import WebSocket
+from src.audio.buffers import AudioStreamer
 
 logger = logging.getLogger(__name__)
 
@@ -10,18 +11,34 @@ logger = logging.getLogger(__name__)
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
+        self.streamers: Dict[str, AudioStreamer] = {}
 
-    async def connect(self, call_sid: str, websocket: WebSocket):
+    async def connect(self, call_sid: str, stream_sid: str, websocket: WebSocket):
+        # Updated signature to accept stream_sid
         await websocket.accept()
         self.active_connections[call_sid] = websocket
-        logger.info(f"Connection accepted for call: {call_sid}")
 
-    def disconnect(self, call_sid: str):
+        # Create and start AudioStreamer
+        streamer = AudioStreamer(websocket, stream_sid)
+        await streamer.start()
+        self.streamers[call_sid] = streamer
+
+        logger.info(f"Connection accepted for call: {call_sid}, stream: {stream_sid}")
+
+    async def disconnect(self, call_sid: str):
+        # Stop streamer
+        streamer = self.streamers.pop(call_sid, None)
+        if streamer:
+            await streamer.stop()
+
         self.active_connections.pop(call_sid, None)
         logger.info(f"Connection removed for call: {call_sid}")
 
     def get(self, call_sid: str) -> WebSocket:
         return self.active_connections.get(call_sid)
+
+    def get_streamer(self, call_sid: str) -> Optional[AudioStreamer]:
+        return self.streamers.get(call_sid)
 
 
 manager = ConnectionManager()
@@ -42,8 +59,8 @@ async def handle_start(websocket: WebSocket, data: dict):
     logger.info(f"Stream started: {stream_sid}, Call: {call_sid}")
     logger.info(f"Media format: {media_format}")
 
-    # Store connection
-    await manager.connect(call_sid, websocket)
+    # Store connection with streamer
+    await manager.connect(call_sid, stream_sid, websocket)
 
 
 async def handle_media(websocket: WebSocket, data: dict):
@@ -81,7 +98,7 @@ async def handle_stop(websocket: WebSocket, data: dict):
     logger.info(f"Stream stopped: {call_sid}")
 
     if call_sid:
-        manager.disconnect(call_sid)
+        await manager.disconnect(call_sid)  # Now async
 
 
 # Message router
