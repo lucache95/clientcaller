@@ -1,6 +1,6 @@
 import json
 import logging
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 from src.config import settings
 from src.twilio.handlers import MESSAGE_HANDLERS, manager, state_manager
@@ -26,23 +26,15 @@ async def health_check():
 
 
 @app.get("/twiml")
-async def twiml_endpoint():
+async def twiml_endpoint(request: Request):
     """
     Serve TwiML to establish Media Stream.
 
     This endpoint can be configured as the Voice URL for a Twilio phone number
     to handle inbound calls.
-
-    For local development, use ngrok URL (e.g., https://abc123.ngrok.io/twiml)
     """
-    # Construct WebSocket URL from current request
-    # In production, use actual domain; for dev, use ngrok
-    # For now, use placeholder - will be replaced in testing plan
-    websocket_url = f"wss://{settings.server_host}/ws"
-
-    # Note: This is a placeholder. In practice, you'd configure this via
-    # environment variable or derive from request headers.
-    # Example: websocket_url = f"wss://{request.headers.get('host')}/ws"
+    host = request.headers.get("host", settings.server_host)
+    websocket_url = f"wss://{host}/ws"
 
     twiml = generate_twiml(websocket_url)
     return Response(content=twiml, media_type="application/xml")
@@ -118,11 +110,12 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 if __name__ == "__main__":
+    import os
     import uvicorn
+    port = int(os.environ.get("PORT", settings.server_port))
     uvicorn.run(
         "src.main:app",
-        host=settings.server_host,
-        port=settings.server_port,
-        reload=True,
+        host="0.0.0.0",
+        port=port,
         log_level="info"
     )
