@@ -30,10 +30,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. User can speak and system receives clear audio (verified via logging/playback)
   3. System can play audio back to caller (test with pre-recorded message)
   4. System maintains stable connection throughout 2+ minute call without dropouts
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- TBD (populated during `/gsd:plan-phase 1`)
+- [ ] 01-01-PLAN.md — Core infrastructure setup (FastAPI WebSocket + audio conversion)
+- [ ] 01-02-PLAN.md — Bidirectional streaming & call management (backpressure + state + outbound)
+- [ ] 01-03-PLAN.md — Testing & verification (ngrok + end-to-end call testing)
 
 ### Phase 2: Speech-to-Text with Streaming
 **Goal**: Real-time speech transcription with fast turn detection
@@ -111,7 +113,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Telephony Foundation & Audio Pipeline | 0/? | Not started | - |
+| 1. Telephony Foundation & Audio Pipeline | 0/3 | Ready to execute | - |
 | 2. Speech-to-Text with Streaming | 0/? | Not started | - |
 | 3. Language Model with Streaming | 0/? | Not started | - |
 | 4. Text-to-Speech with Streaming | 0/? | Not started | - |
