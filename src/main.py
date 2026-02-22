@@ -2,7 +2,7 @@ import json
 import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from src.config import settings
-from src.twilio.handlers import MESSAGE_HANDLERS, manager
+from src.twilio.handlers import MESSAGE_HANDLERS, manager, state_manager
 
 # Configure logging
 logging.basicConfig(
@@ -66,7 +66,8 @@ async def websocket_endpoint(websocket: WebSocket):
     finally:
         # Cleanup on disconnect
         if call_sid:
-            manager.disconnect(call_sid)
+            await manager.disconnect(call_sid)
+            await state_manager.cleanup(call_sid)
 
 
 if __name__ == "__main__":

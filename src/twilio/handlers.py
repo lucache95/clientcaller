@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Optional
 from fastapi import WebSocket
 from src.audio.buffers import AudioStreamer
+from src.state.manager import CallStateManager
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +44,16 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# Create global state manager instance
+state_manager = CallStateManager()
+
 
 async def handle_connected(websocket: WebSocket, data: dict):
     """Handle 'connected' event from Twilio"""
     logger.info("WebSocket connected to Twilio")
+    temp_id, ctx = await state_manager.on_connected(websocket)
+    # Store temp_id for later retrieval in handle_start
+    websocket.state.temp_id = temp_id  # Store on websocket for access
 
 
 async def handle_start(websocket: WebSocket, data: dict):
@@ -56,7 +63,13 @@ async def handle_start(websocket: WebSocket, data: dict):
     stream_sid = start_data.get("streamSid")
     media_format = start_data.get("mediaFormat", {})
 
-    logger.info(f"Stream started: {stream_sid}, Call: {call_sid}")
+    # Get temp_id from websocket state
+    temp_id = getattr(websocket.state, 'temp_id', id(websocket))
+
+    # Update state manager
+    ctx = await state_manager.on_start(temp_id, call_sid, stream_sid)
+
+    logger.info(f"Stream started: {stream_sid}, Call: {call_sid}, State: {ctx.state.value}")
     logger.info(f"Media format: {media_format}")
 
     # Store connection with streamer
@@ -95,10 +108,14 @@ async def handle_stop(websocket: WebSocket, data: dict):
     stop_data = data.get("stop", {})
     call_sid = stop_data.get("callSid")
 
+    # Update state
+    await state_manager.on_stop(call_sid)
+
     logger.info(f"Stream stopped: {call_sid}")
 
     if call_sid:
-        await manager.disconnect(call_sid)  # Now async
+        await manager.disconnect(call_sid)
+        await state_manager.cleanup(call_sid)
 
 
 # Message router
