@@ -9,6 +9,7 @@ pydub>=0.25.1
 soundfile>=0.12.1
 numpy>=1.26.0
 librosa>=0.11.0
+resampy>=0.4.0
 pydantic>=2.10.0
 python-dotenv>=1.0.0
 websockets>=16.0
