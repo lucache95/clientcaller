@@ -10,9 +10,9 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Telephony
 
 - [x] **TEL-01**: System accepts inbound calls via Twilio WebSocket Media Streams
-- [ ] **TEL-02**: System initiates outbound calls to specified phone numbers
+- [x] **TEL-02**: System initiates outbound calls to specified phone numbers
 - [x] **TEL-03**: System converts audio between mu-law 8kHz (Twilio) and PCM 16kHz (models)
-- [ ] **TEL-04**: System maintains bidirectional audio streaming throughout call
+- [x] **TEL-04**: System maintains bidirectional audio streaming throughout call
 
 ### Speech-to-Text
 
@@ -92,9 +92,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | TEL-01 | Phase 1 | Complete |
-| TEL-02 | Phase 1 | Pending |
+| TEL-02 | Phase 1 | Complete |
 | TEL-03 | Phase 1 | Complete |
-| TEL-04 | Phase 1 | Pending |
+| TEL-04 | Phase 1 | Complete |
 | STT-01 | Phase 2 | Pending |
 | STT-02 | Phase 2 | Pending |
 | STT-03 | Phase 2 | Pending |

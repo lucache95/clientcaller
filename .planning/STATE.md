@@ -10,27 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 1 of 6 (Telephony Foundation & Audio Pipeline)
-Plan: 1 of 3 (01-01-PLAN.md complete)
+Plan: 2 of 3 (01-02-PLAN.md complete)
 Status: Executing phase
-Last activity: 2026-02-22 — Completed plan 01-01: WebSocket Server & Audio Pipeline
+Last activity: 2026-02-22 — Completed plan 01-02: Bidirectional Audio Streaming & Call Management
 
-Progress: [██░░░░░░░░] 33%
+Progress: [████░░░░░░] 67%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 4 minutes
-- Total execution time: 0.07 hours
+- Total plans completed: 2
+- Average duration: 4.5 minutes
+- Total execution time: 0.15 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 1 | 4 min | 4 min/plan |
+| 01 | 2 | 9 min | 4.5 min/plan |
 
 **Recent Completions:**
 | Phase 01 P01 | 4 min | 3 tasks | 12 files |
+| Phase 01 P02 | 5 | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -48,6 +49,9 @@ Recent decisions affecting current work:
 - Use pydub instead of deprecated audioop for mu-law conversion (audioop removed in Python 3.13)
 - Use librosa with kaiser_fast resampling mode (5x faster, acceptable quality for real-time)
 - Configure pydantic Settings with extra="ignore" for .env flexibility
+- Use bounded queue with maxsize=50 for audio backpressure (~1 second buffer at 20ms/chunk)
+- Send loop paces at 20ms per chunk to match real-time playback rate
+- Track calls by temp_id until call_sid arrives from Twilio 'start' message
 
 ### Pending Todos
 
@@ -67,9 +71,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-22T08:55:03Z (plan execution)
-Stopped at: Completed 01-01-PLAN.md (WebSocket Server & Audio Pipeline)
-Resume file: .planning/phases/01-telephony-foundation-audio-pipeline/01-01-SUMMARY.md
+Last session: 2026-02-22T08:57:42Z (plan execution)
+Stopped at: Completed 01-02-PLAN.md (Bidirectional Audio Streaming & Call Management)
+Resume file: .planning/phases/01-telephony-foundation-audio-pipeline/01-02-SUMMARY.md
 
 ---
-*Next step: `/gsd:execute-phase 1` to continue with plan 01-02*
+*Next step: `/gsd:execute-phase 1` to continue with plan 01-03*
