@@ -1,8 +1,10 @@
 import json
 import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import Response
 from src.config import settings
 from src.twilio.handlers import MESSAGE_HANDLERS, manager, state_manager
+from src.twilio.client import generate_twiml, create_outbound_call
 
 # Configure logging
 logging.basicConfig(
@@ -21,6 +23,51 @@ async def health_check():
         "status": "healthy",
         "active_connections": len(manager.active_connections)
     }
+
+
+@app.get("/twiml")
+async def twiml_endpoint():
+    """
+    Serve TwiML to establish Media Stream.
+
+    This endpoint can be configured as the Voice URL for a Twilio phone number
+    to handle inbound calls.
+
+    For local development, use ngrok URL (e.g., https://abc123.ngrok.io/twiml)
+    """
+    # Construct WebSocket URL from current request
+    # In production, use actual domain; for dev, use ngrok
+    # For now, use placeholder - will be replaced in testing plan
+    websocket_url = f"wss://{settings.server_host}/ws"
+
+    # Note: This is a placeholder. In practice, you'd configure this via
+    # environment variable or derive from request headers.
+    # Example: websocket_url = f"wss://{request.headers.get('host')}/ws"
+
+    twiml = generate_twiml(websocket_url)
+    return Response(content=twiml, media_type="application/xml")
+
+
+@app.post("/call/outbound")
+async def initiate_outbound_call(to_number: str, websocket_url: str):
+    """
+    API endpoint to initiate an outbound call.
+
+    Args:
+        to_number: Phone number to call (E.164 format)
+        websocket_url: WebSocket URL for Media Streams (typically ngrok URL for dev)
+
+    Returns:
+        Call details including call_sid
+
+    Example:
+        POST /call/outbound?to_number=+15551234567&websocket_url=wss://abc123.ngrok.io/ws
+    """
+    try:
+        result = await create_outbound_call(to_number, websocket_url)
+        return result
+    except Exception as e:
+        return {"error": str(e)}, 500
 
 
 @app.websocket("/ws")
