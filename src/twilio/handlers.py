@@ -23,10 +23,10 @@ class ConnectionManager:
         self.streamers: Dict[str, AudioStreamer] = {}
         self.state_managers: Dict[str, CallStateManager] = {}
 
-        # NEW: STT and VAD processors (shared across calls for model reuse)
-        self.stt_processor = None  # Initialized once on first call
+        # STT processor (shared across calls for model reuse)
+        self.stt_processor = None
 
-        # NEW: VAD instances per call (need separate state per caller)
+        # VAD instances per call (need separate state per caller)
         self.vad_detectors: Dict[str, VADDetector] = {}
 
         # LLM client (shared, stateless connection pool)
@@ -40,6 +40,11 @@ class ConnectionManager:
 
         # stream_sid → call_sid mapping for media handler lookups
         self.stream_to_call: Dict[str, str] = {}
+
+        # Per-call interrupt infrastructure
+        self.interrupt_events: Dict[str, asyncio.Event] = {}
+        self.is_responding: Dict[str, bool] = {}
+        self.response_tasks: Dict[str, asyncio.Task] = {}
 
     def get_stt_processor(self):
         """Get or create shared STT processor"""
@@ -78,8 +83,17 @@ class ConnectionManager:
             self.tts_stream = TTSStream()
         return self.tts_stream
 
+    def get_interrupt_event(self, stream_sid: str) -> asyncio.Event:
+        """Get or create interrupt event for this call"""
+        if stream_sid not in self.interrupt_events:
+            self.interrupt_events[stream_sid] = asyncio.Event()
+        return self.interrupt_events[stream_sid]
+
+    def set_responding(self, stream_sid: str, responding: bool):
+        """Mark whether AI is actively responding for this call"""
+        self.is_responding[stream_sid] = responding
+
     async def connect(self, call_sid: str, stream_sid: str, websocket: WebSocket):
-        # Updated signature to accept stream_sid
         await websocket.accept()
         self.active_connections[call_sid] = websocket
 
@@ -119,8 +133,7 @@ async def handle_connected(websocket: WebSocket, data: dict):
     """Handle 'connected' event from Twilio"""
     logger.info("WebSocket connected to Twilio")
     temp_id, ctx = await state_manager.on_connected(websocket)
-    # Store temp_id for later retrieval in handle_start
-    websocket.state.temp_id = temp_id  # Store on websocket for access
+    websocket.state.temp_id = temp_id
 
 
 async def handle_start(websocket: WebSocket, data: dict):
@@ -130,17 +143,71 @@ async def handle_start(websocket: WebSocket, data: dict):
     stream_sid = start_data.get("streamSid")
     media_format = start_data.get("mediaFormat", {})
 
-    # Get temp_id from websocket state
     temp_id = getattr(websocket.state, 'temp_id', id(websocket))
-
-    # Update state manager
     ctx = await state_manager.on_start(temp_id, call_sid, stream_sid)
 
     logger.info(f"Stream started: {stream_sid}, Call: {call_sid}, State: {ctx.state.value}")
     logger.info(f"Media format: {media_format}")
 
-    # Store connection with streamer
     await manager.connect(call_sid, stream_sid, websocket)
+
+
+async def _generate_response(stream_sid: str, user_text: str):
+    """
+    Generate AI response (LLM → TTS → audio queue) as a cancellable task.
+
+    Sets is_responding=True while active. On cancellation, cleans up gracefully.
+    Returns the (response_text, spoken_index) for context tracking.
+    """
+    conversation = manager.get_conversation(stream_sid)
+    llm_client = manager.get_llm_client()
+    messages = conversation.get_messages()
+
+    response_tokens = []
+    spoken_index = 0
+
+    manager.set_responding(stream_sid, True)
+    try:
+        # Collect LLM tokens
+        async for token in llm_client.generate_streaming(messages):
+            response_tokens.append(token)
+
+        response_text = "".join(response_tokens)
+        logger.info(f"[{stream_sid}] AI response: {response_text}")
+
+        # Stream response through TTS to caller
+        call_sid = manager.stream_to_call.get(stream_sid)
+        streamer = manager.get_streamer(call_sid) if call_sid else None
+        if streamer and response_text.strip():
+            tts_stream = manager.get_tts_stream()
+            async for audio_payload in tts_stream.generate(response_text):
+                await streamer.queue_audio(audio_payload)
+            # All audio sent successfully — full response was spoken
+            spoken_index = len(response_text)
+
+        # Add full response to conversation history
+        conversation.add_assistant_message(response_text)
+
+        logger.info(
+            f"[{stream_sid}] Turn {conversation.get_turn_count()}: "
+            f"User='{user_text[:50]}' AI='{response_text[:50]}'"
+        )
+
+    except asyncio.CancelledError:
+        # Barge-in interrupted us — save only what was spoken
+        response_text = "".join(response_tokens)
+        spoken_text = response_text[:spoken_index] if response_text else ""
+        logger.info(
+            f"[{stream_sid}] Response cancelled (barge-in). "
+            f"Generated {len(response_text)} chars, spoke {spoken_index} chars"
+        )
+        if spoken_text.strip():
+            conversation.add_assistant_message(spoken_text)
+    except Exception as e:
+        logger.error(f"[{stream_sid}] LLM/TTS error: {e}")
+    finally:
+        manager.set_responding(stream_sid, False)
+        manager.response_tasks.pop(stream_sid, None)
 
 
 async def handle_media(websocket: WebSocket, data: dict):
@@ -151,8 +218,9 @@ async def handle_media(websocket: WebSocket, data: dict):
     1. Decode base64 mu-law from Twilio
     2. Convert mu-law → PCM 8kHz → 16kHz for STT/VAD
     3. Run VAD to detect speech/silence
-    4. Feed audio to STT if speech detected
-    5. On turn complete: finalize transcript → LLM → TTS → audio to caller
+    4. If speech during AI response → barge-in detected
+    5. Feed audio to STT if speech detected
+    6. On turn complete: spawn cancellable LLM → TTS response task
     """
     media_data = data.get("media", {})
     payload = media_data.get("payload")
@@ -165,7 +233,7 @@ async def handle_media(websocket: WebSocket, data: dict):
     # Decode Twilio audio
     audio_mulaw = base64.b64decode(payload)
 
-    # Phase 1 conversion pipeline
+    # Audio conversion pipeline
     pcm_8khz = mulaw_to_pcm(audio_mulaw)
     pcm_16khz = resample_8k_to_16k(pcm_8khz)
 
@@ -176,9 +244,15 @@ async def handle_media(websocket: WebSocket, data: dict):
     # Run VAD on chunk
     vad_result = vad_detector.process_chunk(pcm_16khz)
 
+    # Barge-in detection: user speaking while AI is responding
+    if vad_result["is_speech"] and manager.is_responding.get(stream_sid, False):
+        interrupt_event = manager.get_interrupt_event(stream_sid)
+        if not interrupt_event.is_set():
+            interrupt_event.set()
+            logger.info(f"[{stream_sid}] Barge-in detected — user interrupting AI")
+
     if vad_result["is_speech"]:
         # Speech detected - feed to STT
-        # Use asyncio.to_thread to avoid blocking event loop (per 02-RESEARCH.md Anti-Pattern 5)
         async def process_stt():
             partials = []
             for partial in stt_processor.process_audio_chunk(pcm_16khz):
@@ -200,37 +274,12 @@ async def handle_media(websocket: WebSocket, data: dict):
         logger.info(f"[{stream_sid}] User said: {user_text}")
 
         if user_text and user_text.strip():
-            # Add user message to conversation history
             conversation = manager.get_conversation(stream_sid)
             conversation.add_user_message(user_text)
 
-            # Generate LLM response (streaming)
-            llm_client = manager.get_llm_client()
-            messages = conversation.get_messages()
-
-            response_tokens = []
-            try:
-                async for token in llm_client.generate_streaming(messages):
-                    response_tokens.append(token)
-
-                response_text = "".join(response_tokens)
-                logger.info(f"[{stream_sid}] AI response: {response_text}")
-
-                # Add assistant response to conversation history
-                conversation.add_assistant_message(response_text)
-
-                # Stream response through TTS to caller
-                call_sid = manager.stream_to_call.get(stream_sid)
-                streamer = manager.get_streamer(call_sid) if call_sid else None
-                if streamer and response_text.strip():
-                    tts_stream = manager.get_tts_stream()
-                    async for audio_payload in tts_stream.generate(response_text):
-                        await streamer.queue_audio(audio_payload)
-
-                logger.info(f"[{stream_sid}] Turn {conversation.get_turn_count()}: User='{user_text[:50]}' AI='{response_text[:50]}'")
-
-            except Exception as e:
-                logger.error(f"[{stream_sid}] LLM/TTS error: {e}")
+            # Spawn response as cancellable task
+            task = asyncio.create_task(_generate_response(stream_sid, user_text))
+            manager.response_tasks[stream_sid] = task
 
         # Reset VAD for next turn
         vad_detector.reset()
@@ -242,9 +291,14 @@ async def handle_stop(websocket: WebSocket, data: dict):
     call_sid = stop_data.get("callSid")
     stream_sid = stop_data.get("streamSid")
 
+    # Cancel any in-flight response task
+    if stream_sid:
+        task = manager.response_tasks.pop(stream_sid, None)
+        if task and not task.done():
+            task.cancel()
+
     # Update state
     await state_manager.on_stop(call_sid)
-
     logger.info(f"Stream stopped: {call_sid}")
 
     if call_sid:
@@ -256,6 +310,9 @@ async def handle_stop(websocket: WebSocket, data: dict):
         manager.vad_detectors.pop(stream_sid, None)
         manager.conversations.pop(stream_sid, None)
         manager.stream_to_call.pop(stream_sid, None)
+        manager.interrupt_events.pop(stream_sid, None)
+        manager.is_responding.pop(stream_sid, None)
+        manager.response_tasks.pop(stream_sid, None)
 
 
 # Message router
@@ -264,5 +321,4 @@ MESSAGE_HANDLERS = {
     "start": handle_start,
     "media": handle_media,
     "stop": handle_stop,
-    # mark and dtmf events are optional, can be added later
 }
