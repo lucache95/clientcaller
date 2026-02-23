@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Telephony Foundation & Audio Pipeline** - Twilio WebSocket integration with bidirectional audio streaming (completed 2026-02-22)
 - [x] **Phase 2: Speech-to-Text with Streaming** - Real-time speech transcription with VAD-based turn detection (completed 2026-02-23)
 - [x] **Phase 3: Language Model with Streaming** - Conversational responses via Gemma 3 27B with context retention (completed 2026-02-23)
-- [ ] **Phase 4: Text-to-Speech with Streaming** - Natural voice synthesis using CSM with conversational prosody
+- [x] **Phase 4: Text-to-Speech with Streaming** - Natural voice synthesis with edge-tts streaming (completed 2026-02-23)
 - [ ] **Phase 5: Interruption Handling & Polish** - Barge-in capability with context drift prevention
 - [ ] **Phase 6: Cloud GPU Deployment & Production Hardening** - RunPod A100 deployment with concurrent model serving
 
@@ -77,10 +77,12 @@ Plans:
   2. AI starts speaking within 500ms of user finishing their sentence
   3. AI's speech flows naturally with proper pauses and intonation
   4. Complete conversation loop works: user speaks → AI transcribes → AI thinks → AI responds
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- TBD (populated during `/gsd:plan-phase 4`)
+- [x] 04-01-PLAN.md — TTS client module (edge-tts with streaming PCM generation)
+- [x] 04-02-PLAN.md — TTS-to-Twilio pipeline (resample + mu-law + base64 chunking)
+- [x] 04-03-PLAN.md — Integration + E2E testing (wire TTS into handlers, full loop)
 
 ### Phase 5: Interruption Handling & Polish
 **Goal**: Natural conversation with barge-in capability
@@ -120,6 +122,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Telephony Foundation & Audio Pipeline | 3/3 | Complete   | 2026-02-22 |
 | 2. Speech-to-Text with Streaming | 3/3 | Complete | 2026-02-23 |
 | 3. Language Model with Streaming | 3/3 | Complete | 2026-02-23 |
-| 4. Text-to-Speech with Streaming | 0/? | Not started | - |
+| 4. Text-to-Speech with Streaming | 3/3 | Complete | 2026-02-23 |
 | 5. Interruption Handling & Polish | 0/? | Not started | - |
 | 6. Cloud GPU Deployment & Production Hardening | 0/? | Not started | - |

@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-21)
 
 **Core value:** The call must sound and feel like talking to a real person — natural voice, natural timing, no robotic pauses or awkward delays.
-**Current focus:** Phase 3 complete — Ready for Phase 4 (Text-to-Speech)
+**Current focus:** Phase 4 complete — Ready for Phase 5 (Interruption Handling)
 
 ## Current Position
 
-Phase: 3 of 6 (Language Model with Streaming — COMPLETE)
+Phase: 4 of 6 (Text-to-Speech with Streaming — COMPLETE)
 Plan: 3 of 3 (all plans executed)
 Status: Complete
-Last activity: 2026-02-23 — Completed Phase 3 (LLM client + conversation manager + handler integration)
+Last activity: 2026-02-23 — Completed Phase 4 (TTS client + audio pipeline + handler integration)
 
-Progress: [██████░░░░] 60%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
+- Total plans completed: 12
 - Average duration: 5 minutes
-- Total execution time: 0.8 hours
+- Total execution time: 1.0 hours
 
 **By Phase:**
 
@@ -30,6 +30,7 @@ Progress: [██████░░░░] 60%
 | 01 | 3 | 24 min | 8 min/plan |
 | 02 | 3 | 17 min | 6 min/plan |
 | 03 | 3 | 11 min | 4 min/plan |
+| 04 | 3 | 14 min | 5 min/plan |
 
 **Recent Completions:**
 | Phase 01 P01 | 4 min | 3 tasks | 12 files |
@@ -41,6 +42,9 @@ Progress: [██████░░░░] 60%
 | Phase 03 P01 | 4 | 3 tasks | 6 files |
 | Phase 03 P02 | 3 | 2 tasks | 3 files |
 | Phase 03 P03 | 4 | 2 tasks | 2 files |
+| Phase 04 P01 | 6 | 3 tasks | 7 files |
+| Phase 04 P02 | 4 | 2 tasks | 2 files |
+| Phase 04 P03 | 4 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -79,6 +83,15 @@ Recent decisions affecting current work:
 - Graceful LLM error handling (logged, doesn't crash the call)
 - RunPod endpoint URL format: https://api.runpod.ai/v2/<ENDPOINT_ID>/openai/v1
 
+**Phase 04 decisions:**
+- edge-tts over kokoro for CPU/dev TTS (kokoro fails on Python 3.14, edge-tts is lightweight + high quality)
+- MP3 chunked decoding: accumulate ~4.8KB before pydub parse for reliable streaming
+- Sentence-level TTS streaming: collect LLM tokens until sentence boundary for natural prosody
+- 24kHz → 8kHz resampling + mu-law encoding for Twilio format
+- 20ms chunk splitting (160 samples at 8kHz) matching Twilio's real-time playback
+- stream_sid → call_sid mapping added for media handler streamer lookups
+- CSM remains target for GPU/production (edge-tts is CPU/dev bridge)
+
 ### Pending Todos
 
 None yet.
@@ -94,13 +107,13 @@ None yet.
 - Phase 2: VAD integration with STT (Plan 03) requires real PSTN audio quality testing
 - Phase 2: STT latency benchmarking needed to confirm sub-200ms transcription budget
 - Phase 3: Gemma 27B TTFT may be too slow (800ms) — decision point: stick with Gemma, switch to Gemma 9B, or use commercial API
-- Phase 4: CSM latency characteristics not documented — needs benchmarking to confirm sub-150ms TTS budget
+- Phase 4: Edge-tts latency depends on network (Microsoft servers) — measure in E2E testing
 
 ## Session Continuity
 
 Last session: 2026-02-23 (plan execution)
-Stopped at: Completed Phase 3 (all 3 plans)
-Resume file: .planning/phases/03-language-model-with-streaming/03-03-SUMMARY.md
+Stopped at: Completed Phase 4 (all 3 plans)
+Resume file: .planning/phases/04-text-to-speech-with-streaming/04-03-SUMMARY.md
 
 ---
-*Next step: Plan and execute Phase 4 (Text-to-Speech with Streaming - CSM)*
+*Next step: Plan and execute Phase 5 (Interruption Handling & Polish)*
