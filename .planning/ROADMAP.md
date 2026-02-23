@@ -33,9 +33,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Core infrastructure setup (FastAPI WebSocket + audio conversion)
-- [ ] 01-02-PLAN.md — Bidirectional streaming & call management (backpressure + state + outbound)
-- [ ] 01-03-PLAN.md — Testing & verification (ngrok + end-to-end call testing)
+- [x] 01-01-PLAN.md — Core infrastructure setup (FastAPI WebSocket + audio conversion)
+- [x] 01-02-PLAN.md — Bidirectional streaming & call management (backpressure + state + outbound)
+- [x] 01-03-PLAN.md — Testing & verification (ngrok + end-to-end call testing)
 
 ### Phase 2: Speech-to-Text with Streaming
 **Goal**: Real-time speech transcription with fast turn detection
@@ -46,10 +46,12 @@ Plans:
   2. System detects when user stops speaking within 300ms
   3. System produces accurate transcription of user's words within 200ms of speech ending
   4. System handles natural pauses (2-3 second silence) without premature cutoff
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- TBD (populated during `/gsd:plan-phase 2`)
+- [ ] 02-01-PLAN.md — Streaming STT module (faster-whisper + whisper_streaming)
+- [ ] 02-02-PLAN.md — VAD turn detection module (Silero VAD)
+- [ ] 02-03-PLAN.md — Integration + E2E testing (wire into handlers, test with calls)
 
 ### Phase 3: Language Model with Streaming
 **Goal**: Natural conversational responses with streaming generation
@@ -114,7 +116,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Telephony Foundation & Audio Pipeline | 3/3 | Complete   | 2026-02-22 |
-| 2. Speech-to-Text with Streaming | 0/? | Not started | - |
+| 2. Speech-to-Text with Streaming | 0/3 | Not started | - |
 | 3. Language Model with Streaming | 0/? | Not started | - |
 | 4. Text-to-Speech with Streaming | 0/? | Not started | - |
 | 5. Interruption Handling & Polish | 0/? | Not started | - |
