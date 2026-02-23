@@ -10,6 +10,7 @@ from src.stt.processor import STTProcessor
 from src.vad.detector import VADDetector
 from src.llm.client import LLMClient
 from src.llm.conversation import ConversationManager
+from src.tts.stream import TTSStream
 from src.audio.conversion import mulaw_to_pcm
 from src.audio.resampling import resample_8k_to_16k
 
@@ -33,6 +34,12 @@ class ConnectionManager:
 
         # Conversation managers per call (per-call state)
         self.conversations: Dict[str, ConversationManager] = {}
+
+        # TTS stream (shared, stateless)
+        self.tts_stream = None
+
+        # stream_sid → call_sid mapping for media handler lookups
+        self.stream_to_call: Dict[str, str] = {}
 
     def get_stt_processor(self):
         """Get or create shared STT processor"""
@@ -65,6 +72,12 @@ class ConnectionManager:
             )
         return self.vad_detectors[stream_sid]
 
+    def get_tts_stream(self) -> TTSStream:
+        """Get or create shared TTS stream"""
+        if self.tts_stream is None:
+            self.tts_stream = TTSStream()
+        return self.tts_stream
+
     async def connect(self, call_sid: str, stream_sid: str, websocket: WebSocket):
         # Updated signature to accept stream_sid
         await websocket.accept()
@@ -74,6 +87,9 @@ class ConnectionManager:
         streamer = AudioStreamer(websocket, stream_sid)
         await streamer.start()
         self.streamers[call_sid] = streamer
+
+        # Map stream_sid → call_sid for media handler lookups
+        self.stream_to_call[stream_sid] = call_sid
 
         logger.info(f"Connection accepted for call: {call_sid}, stream: {stream_sid}")
 
@@ -129,15 +145,14 @@ async def handle_start(websocket: WebSocket, data: dict):
 
 async def handle_media(websocket: WebSocket, data: dict):
     """
-    Process incoming audio through STT + VAD pipeline.
+    Process incoming audio through full conversation pipeline.
 
     Flow:
     1. Decode base64 mu-law from Twilio
-    2. Convert mu-law → PCM 8kHz
-    3. Resample 8kHz → 16kHz for STT/VAD
-    4. Run VAD to detect speech/silence
-    5. Feed audio to STT if speech detected
-    6. Finalize transcript on turn complete
+    2. Convert mu-law → PCM 8kHz → 16kHz for STT/VAD
+    3. Run VAD to detect speech/silence
+    4. Feed audio to STT if speech detected
+    5. On turn complete: finalize transcript → LLM → TTS → audio to caller
     """
     media_data = data.get("media", {})
     payload = media_data.get("payload")
@@ -204,11 +219,18 @@ async def handle_media(websocket: WebSocket, data: dict):
                 # Add assistant response to conversation history
                 conversation.add_assistant_message(response_text)
 
-                # TODO Phase 4: Send response_text to TTS for audio playback
+                # Stream response through TTS to caller
+                call_sid = manager.stream_to_call.get(stream_sid)
+                streamer = manager.get_streamer(call_sid) if call_sid else None
+                if streamer and response_text.strip():
+                    tts_stream = manager.get_tts_stream()
+                    async for audio_payload in tts_stream.generate(response_text):
+                        await streamer.queue_audio(audio_payload)
+
                 logger.info(f"[{stream_sid}] Turn {conversation.get_turn_count()}: User='{user_text[:50]}' AI='{response_text[:50]}'")
 
             except Exception as e:
-                logger.error(f"[{stream_sid}] LLM error: {e}")
+                logger.error(f"[{stream_sid}] LLM/TTS error: {e}")
 
         # Reset VAD for next turn
         vad_detector.reset()
@@ -233,6 +255,7 @@ async def handle_stop(websocket: WebSocket, data: dict):
     if stream_sid:
         manager.vad_detectors.pop(stream_sid, None)
         manager.conversations.pop(stream_sid, None)
+        manager.stream_to_call.pop(stream_sid, None)
 
 
 # Message router
