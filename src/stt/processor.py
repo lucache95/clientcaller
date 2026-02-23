@@ -119,13 +119,15 @@ class STTProcessor:
                 {
                     "type": "partial",
                     "text": str,
-                    "timestamp": float
+                    "beg": float,  # start timestamp
+                    "end": float   # end timestamp
                 }
 
         Notes:
             - Yields iteratively as LocalAgreement policy confirms text
             - Partial transcripts may update/refine as more audio arrives
             - Call finalize_turn() to get final transcript and reset state
+            - May not yield anything for silence or very short audio
         """
         # Convert int16 to float32 normalized to [-1, 1]
         # Whisper expects float32 audio in range [-1.0, 1.0]
@@ -135,12 +137,18 @@ class STTProcessor:
         self.online.insert_audio_chunk(audio_float)
 
         # Get partial transcripts (iterative, yields as text is confirmed)
-        for timestamp, text in self.online.process_iter():
-            yield {
-                "type": "partial",
-                "text": text,
-                "timestamp": timestamp
-            }
+        # process_iter() returns (beg, end, text) or (None, None, "")
+        result = self.online.process_iter()
+        if result is not None:
+            beg, end, text = result
+            # Only yield if we have actual text (not silence)
+            if text:
+                yield {
+                    "type": "partial",
+                    "text": text,
+                    "beg": beg,
+                    "end": end
+                }
 
     def finalize_turn(self) -> Dict[str, Any]:
         """
@@ -151,7 +159,8 @@ class STTProcessor:
                 {
                     "type": "final",
                     "text": str,
-                    "timestamp": float
+                    "beg": float,  # start timestamp
+                    "end": float   # end timestamp
                 }
 
         Notes:
@@ -159,7 +168,8 @@ class STTProcessor:
             - CRITICAL: Must call between turns per 02-RESEARCH.md Pitfall 7
         """
         # Get final transcript from remaining audio
-        timestamp, final_text = self.online.finish()
+        # finish() returns (beg, end, text) or (None, None, "")
+        beg, end, final_text = self.online.finish()
 
         # Reset processor state for next turn
         # CRITICAL: Prevents context from previous turn bleeding into next
@@ -168,5 +178,6 @@ class STTProcessor:
         return {
             "type": "final",
             "text": final_text,
-            "timestamp": timestamp
+            "beg": beg,
+            "end": end
         }
