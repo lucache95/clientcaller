@@ -27,6 +27,9 @@ silero-vad>=5.1  # ML-based VAD for speech/silence detection
 # Language Model (LLM) - OpenAI-compatible API client for vLLM/RunPod
 openai>=2.0.0
 
+# Text-to-Speech (TTS) - edge-tts for CPU/dev, CSM for GPU/production
+edge-tts>=7.0.0
+
 # PyTorch for model loading (required for Silero VAD and Whisper)
 torch>=2.0.0
 torchaudio>=2.0.0

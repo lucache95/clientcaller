@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     llm_max_tokens: int = Field(default=256, env="LLM_MAX_TOKENS")
     llm_temperature: float = Field(default=0.7, env="LLM_TEMPERATURE")
 
+    # TTS Configuration
+    tts_engine: str = Field(default="edge", env="TTS_ENGINE")
+    tts_voice: str = Field(default="en-US-AriaNeural", env="TTS_VOICE")
+    tts_rate: str = Field(default="+0%", env="TTS_RATE")
+
     class Config:
         env_file = ".env"
         case_sensitive = False
