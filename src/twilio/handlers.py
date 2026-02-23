@@ -152,12 +152,16 @@ async def handle_start(websocket: WebSocket, data: dict):
     await manager.connect(call_sid, stream_sid, websocket)
 
 
+FILLER_RESPONSE = "Sorry, give me just a moment."
+
+
 async def _generate_response(stream_sid: str, user_text: str):
     """
     Generate AI response (LLM → TTS → audio queue) as a cancellable task.
 
-    Sets is_responding=True while active. On cancellation, cleans up gracefully.
-    Returns the (response_text, spoken_index) for context tracking.
+    Tracks which sentences have been sent to TTS (spoken_index) so that on
+    barge-in cancellation, only the spoken portion is saved to history.
+    Includes error recovery: LLM failures trigger a filler response via TTS.
     """
     conversation = manager.get_conversation(stream_sid)
     llm_client = manager.get_llm_client()
@@ -165,27 +169,62 @@ async def _generate_response(stream_sid: str, user_text: str):
 
     response_tokens = []
     spoken_index = 0
+    sentence_endings = {".", "!", "?", "\n"}
 
     manager.set_responding(stream_sid, True)
     try:
-        # Collect LLM tokens
-        async for token in llm_client.generate_streaming(messages):
-            response_tokens.append(token)
+        # Collect LLM tokens with sentence-level TTS streaming
+        call_sid = manager.stream_to_call.get(stream_sid)
+        streamer = manager.get_streamer(call_sid) if call_sid else None
+        tts_stream = manager.get_tts_stream() if streamer else None
+
+        sentence_buffer = ""
+        try:
+            async for token in llm_client.generate_streaming(messages):
+                response_tokens.append(token)
+                sentence_buffer += token
+
+                # Send complete sentences to TTS immediately
+                if tts_stream and any(
+                    sentence_buffer.rstrip().endswith(end) for end in sentence_endings
+                ):
+                    sentence_text = sentence_buffer.strip()
+                    if sentence_text:
+                        try:
+                            async for audio_payload in tts_stream.generate(sentence_text):
+                                await streamer.queue_audio(audio_payload)
+                            # Mark this sentence as spoken
+                            spoken_index = len("".join(response_tokens))
+                        except Exception as e:
+                            logger.warning(f"[{stream_sid}] TTS error for sentence, skipping: {e}")
+                    sentence_buffer = ""
+        except asyncio.CancelledError:
+            raise  # Re-raise for outer handler
+        except Exception as e:
+            # LLM error — send filler response if nothing spoken yet
+            logger.error(f"[{stream_sid}] LLM error: {e}")
+            if spoken_index == 0 and streamer and tts_stream:
+                try:
+                    async for audio_payload in tts_stream.generate(FILLER_RESPONSE):
+                        await streamer.queue_audio(audio_payload)
+                    logger.info(f"[{stream_sid}] Sent filler response after LLM error")
+                except Exception as tts_err:
+                    logger.error(f"[{stream_sid}] Filler TTS also failed: {tts_err}")
+            return
+
+        # Flush remaining sentence buffer
+        if sentence_buffer.strip() and tts_stream and streamer:
+            try:
+                async for audio_payload in tts_stream.generate(sentence_buffer.strip()):
+                    await streamer.queue_audio(audio_payload)
+                spoken_index = len("".join(response_tokens))
+            except Exception as e:
+                logger.warning(f"[{stream_sid}] TTS error for final sentence, skipping: {e}")
 
         response_text = "".join(response_tokens)
         logger.info(f"[{stream_sid}] AI response: {response_text}")
 
-        # Stream response through TTS to caller
-        call_sid = manager.stream_to_call.get(stream_sid)
-        streamer = manager.get_streamer(call_sid) if call_sid else None
-        if streamer and response_text.strip():
-            tts_stream = manager.get_tts_stream()
-            async for audio_payload in tts_stream.generate(response_text):
-                await streamer.queue_audio(audio_payload)
-            # All audio sent successfully — full response was spoken
-            spoken_index = len(response_text)
-
-        # Add full response to conversation history
+        # Full response spoken — save to history
         conversation.add_assistant_message(response_text)
 
         logger.info(
@@ -202,9 +241,9 @@ async def _generate_response(stream_sid: str, user_text: str):
             f"Generated {len(response_text)} chars, spoke {spoken_index} chars"
         )
         if spoken_text.strip():
-            conversation.add_assistant_message(spoken_text)
+            conversation.add_assistant_message_partial(spoken_text)
     except Exception as e:
-        logger.error(f"[{stream_sid}] LLM/TTS error: {e}")
+        logger.error(f"[{stream_sid}] Response error: {e}")
     finally:
         manager.set_responding(stream_sid, False)
         manager.response_tasks.pop(stream_sid, None)

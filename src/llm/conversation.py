@@ -82,6 +82,20 @@ class ConversationManager:
             removed = self.history.pop(0)
             logger.debug(f"Trimmed oldest message: {removed['role']}")
 
+    def add_assistant_message_partial(self, spoken_text: str) -> None:
+        """
+        Add a partial assistant message (response was interrupted by barge-in).
+
+        Only saves the portion that was actually spoken aloud. Appends an
+        [interrupted] marker so the LLM knows its previous response was cut off.
+        """
+        if not spoken_text or not spoken_text.strip():
+            return
+        content = spoken_text.strip() + " [interrupted]"
+        self.history.append({"role": "assistant", "content": content})
+        self._trim_history()
+        logger.debug(f"Added partial assistant message: {spoken_text[:50]}...")
+
     def reset(self) -> None:
         """Reset conversation history (keep system prompt)."""
         self.history = []
