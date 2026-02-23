@@ -8,6 +8,8 @@ from src.audio.buffers import AudioStreamer
 from src.state.manager import CallStateManager
 from src.stt.processor import STTProcessor
 from src.vad.detector import VADDetector
+from src.llm.client import LLMClient
+from src.llm.conversation import ConversationManager
 from src.audio.conversion import mulaw_to_pcm
 from src.audio.resampling import resample_8k_to_16k
 
@@ -26,6 +28,12 @@ class ConnectionManager:
         # NEW: VAD instances per call (need separate state per caller)
         self.vad_detectors: Dict[str, VADDetector] = {}
 
+        # LLM client (shared, stateless connection pool)
+        self.llm_client = None
+
+        # Conversation managers per call (per-call state)
+        self.conversations: Dict[str, ConversationManager] = {}
+
     def get_stt_processor(self):
         """Get or create shared STT processor"""
         if self.stt_processor is None:
@@ -34,6 +42,18 @@ class ConnectionManager:
                 language="en"
             )
         return self.stt_processor
+
+    def get_llm_client(self) -> LLMClient:
+        """Get or create shared LLM client"""
+        if self.llm_client is None:
+            self.llm_client = LLMClient()
+        return self.llm_client
+
+    def get_conversation(self, stream_sid: str) -> ConversationManager:
+        """Get or create conversation manager for this call"""
+        if stream_sid not in self.conversations:
+            self.conversations[stream_sid] = ConversationManager()
+        return self.conversations[stream_sid]
 
     def get_vad_detector(self, stream_sid: str) -> VADDetector:
         """Get or create VAD detector for this call"""
@@ -159,13 +179,36 @@ async def handle_media(websocket: WebSocket, data: dict):
     if vad_result["turn_complete"]:
         logger.info(f"[{stream_sid}] Turn complete after {vad_result['silence_duration_ms']}ms silence")
 
-        # Finalize transcript
+        # Finalize STT transcript
         final = await asyncio.to_thread(stt_processor.finalize_turn)
-        logger.info(f"[{stream_sid}] Final: {final['text']}")
+        user_text = final["text"]
+        logger.info(f"[{stream_sid}] User said: {user_text}")
 
-        # Update call state
-        # (future: send to LLM in Phase 3)
-        logger.info(f"[{stream_sid}] User said: {final['text']}")
+        if user_text and user_text.strip():
+            # Add user message to conversation history
+            conversation = manager.get_conversation(stream_sid)
+            conversation.add_user_message(user_text)
+
+            # Generate LLM response (streaming)
+            llm_client = manager.get_llm_client()
+            messages = conversation.get_messages()
+
+            response_tokens = []
+            try:
+                async for token in llm_client.generate_streaming(messages):
+                    response_tokens.append(token)
+
+                response_text = "".join(response_tokens)
+                logger.info(f"[{stream_sid}] AI response: {response_text}")
+
+                # Add assistant response to conversation history
+                conversation.add_assistant_message(response_text)
+
+                # TODO Phase 4: Send response_text to TTS for audio playback
+                logger.info(f"[{stream_sid}] Turn {conversation.get_turn_count()}: User='{user_text[:50]}' AI='{response_text[:50]}'")
+
+            except Exception as e:
+                logger.error(f"[{stream_sid}] LLM error: {e}")
 
         # Reset VAD for next turn
         vad_detector.reset()
@@ -186,9 +229,10 @@ async def handle_stop(websocket: WebSocket, data: dict):
         await manager.disconnect(call_sid)
         await state_manager.cleanup(call_sid)
 
-    # NEW: Remove VAD detector
-    if stream_sid and stream_sid in manager.vad_detectors:
-        del manager.vad_detectors[stream_sid]
+    # Cleanup per-call state
+    if stream_sid:
+        manager.vad_detectors.pop(stream_sid, None)
+        manager.conversations.pop(stream_sid, None)
 
 
 # Message router
