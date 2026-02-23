@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-21)
 
 **Core value:** The call must sound and feel like talking to a real person — natural voice, natural timing, no robotic pauses or awkward delays.
-**Current focus:** Phase 4 complete — Ready for Phase 5 (Interruption Handling)
+**Current focus:** Phase 5 complete — Ready for Phase 6 (Cloud GPU Deployment)
 
 ## Current Position
 
-Phase: 4 of 6 (Text-to-Speech with Streaming — COMPLETE)
+Phase: 5 of 6 (Interruption Handling & Polish — COMPLETE)
 Plan: 3 of 3 (all plans executed)
 Status: Complete
-Last activity: 2026-02-23 — Completed Phase 4 (TTS client + audio pipeline + handler integration)
+Last activity: 2026-02-23 — Completed Phase 5 (barge-in + interrupt handling + context drift prevention + error recovery)
 
-Progress: [████████░░] 80%
+Progress: [█████████░] 95%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
+- Total plans completed: 15
 - Average duration: 5 minutes
-- Total execution time: 1.0 hours
+- Total execution time: 1.3 hours
 
 **By Phase:**
 
@@ -31,6 +31,7 @@ Progress: [████████░░] 80%
 | 02 | 3 | 17 min | 6 min/plan |
 | 03 | 3 | 11 min | 4 min/plan |
 | 04 | 3 | 14 min | 5 min/plan |
+| 05 | 3 | 16 min | 5 min/plan |
 
 **Recent Completions:**
 | Phase 01 P01 | 4 min | 3 tasks | 12 files |
@@ -45,6 +46,9 @@ Progress: [████████░░] 80%
 | Phase 04 P01 | 6 | 3 tasks | 7 files |
 | Phase 04 P02 | 4 | 2 tasks | 2 files |
 | Phase 04 P03 | 4 | 2 tasks | 2 files |
+| Phase 05 P01 | 6 | 4 tasks | 2 files |
+| Phase 05 P02 | 5 | 4 tasks | 3 files |
+| Phase 05 P03 | 5 | 4 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -92,28 +96,36 @@ Recent decisions affecting current work:
 - stream_sid → call_sid mapping added for media handler streamer lookups
 - CSM remains target for GPU/production (edge-tts is CPU/dev bridge)
 
+**Phase 05 decisions:**
+- Per-call asyncio.Event for interrupt signaling (lightweight, no locks needed)
+- Response pipeline as asyncio.Task for clean cancellation via CancelledError
+- Sentence-level spoken_index tracking: only TTS-sent sentences count as "spoken"
+- [interrupted] marker in partial messages helps LLM understand context after barge-in
+- Twilio 'clear' WebSocket message flushes server-side audio buffer on interrupt
+- LLM error → filler TTS ("Sorry, give me a moment") instead of silence
+- TTS error per-sentence → skip and continue (don't crash the call)
+
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
-**Phase 1 Complete - All architecture decisions resolved:**
+**Phase 1-5 Complete - All architecture decisions resolved:**
 - ✅ Audio format conversion strategy (8kHz mu-law ↔ 16kHz PCM) implemented and tested
 - ✅ State machine design for call lifecycle (IDLE → CONNECTING → ACTIVE → STOPPING) implemented
-- Future: Context drift prevention architecture (token-level tracking) will be addressed in Phase 5
+- ✅ Context drift prevention architecture (sentence-level tracking with partial messages) implemented
 
 **Validation needed during execution:**
-- Phase 2: VAD integration with STT (Plan 03) requires real PSTN audio quality testing
-- Phase 2: STT latency benchmarking needed to confirm sub-200ms transcription budget
-- Phase 3: Gemma 27B TTFT may be too slow (800ms) — decision point: stick with Gemma, switch to Gemma 9B, or use commercial API
-- Phase 4: Edge-tts latency depends on network (Microsoft servers) — measure in E2E testing
+- Phase 6: GPU memory budget for concurrent Whisper + Gemma + CSM on A100 80GB
+- Phase 6: vLLM batching config for multi-call concurrency
+- Phase 6: CSM integration to replace edge-tts (GPU-only model)
 
 ## Session Continuity
 
 Last session: 2026-02-23 (plan execution)
-Stopped at: Completed Phase 4 (all 3 plans)
-Resume file: .planning/phases/04-text-to-speech-with-streaming/04-03-SUMMARY.md
+Stopped at: Completed Phase 5 (all 3 plans)
+Resume file: .planning/phases/05-interruption-handling-polish/05-03-SUMMARY.md
 
 ---
-*Next step: Plan and execute Phase 5 (Interruption Handling & Polish)*
+*Next step: Plan and execute Phase 6 (Cloud GPU Deployment & Production Hardening)*

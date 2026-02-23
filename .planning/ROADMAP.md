@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Speech-to-Text with Streaming** - Real-time speech transcription with VAD-based turn detection (completed 2026-02-23)
 - [x] **Phase 3: Language Model with Streaming** - Conversational responses via Gemma 3 27B with context retention (completed 2026-02-23)
 - [x] **Phase 4: Text-to-Speech with Streaming** - Natural voice synthesis with edge-tts streaming (completed 2026-02-23)
-- [ ] **Phase 5: Interruption Handling & Polish** - Barge-in capability with context drift prevention
+- [x] **Phase 5: Interruption Handling & Polish** - Barge-in capability with context drift prevention (completed 2026-02-23)
 - [ ] **Phase 6: Cloud GPU Deployment & Production Hardening** - RunPod A100 deployment with concurrent model serving
 
 ## Phase Details
@@ -93,10 +93,12 @@ Plans:
   2. AI responds to interruption within 200ms (no robotic delay)
   3. Conversation context remains accurate after 3+ interruptions (no drift)
   4. System recovers from errors (network glitch, model timeout) without hanging up on caller
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- TBD (populated during `/gsd:plan-phase 5`)
+- [x] 05-01-PLAN.md — Barge-in detection (VAD interrupt signal + cancellable response task)
+- [x] 05-02-PLAN.md — Interrupt handling (cancel LLM/TTS, drain queue, Twilio clear)
+- [x] 05-03-PLAN.md — Context drift prevention + error recovery
 
 ### Phase 6: Cloud GPU Deployment & Production Hardening
 **Goal**: Production-ready deployment with all models running concurrently
@@ -123,5 +125,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Speech-to-Text with Streaming | 3/3 | Complete | 2026-02-23 |
 | 3. Language Model with Streaming | 3/3 | Complete | 2026-02-23 |
 | 4. Text-to-Speech with Streaming | 3/3 | Complete | 2026-02-23 |
-| 5. Interruption Handling & Polish | 0/? | Not started | - |
+| 5. Interruption Handling & Polish | 3/3 | Complete | 2026-02-23 |
 | 6. Cloud GPU Deployment & Production Hardening | 0/? | Not started | - |
