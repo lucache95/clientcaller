@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 2 of 6 (Speech-to-Text with Streaming)
-Plan: 2 of 3 (02-02-PLAN.md complete)
+Plan: 1 of 3 (02-01-PLAN.md complete)
 Status: In progress
-Last activity: 2026-02-23 — Completed plan 02-02: Voice Activity Detection with Silero VAD
+Last activity: 2026-02-23 — Completed plan 02-01: Streaming Speech-to-Text Module
 
 Progress: [███░░░░░░░] 33%
 
@@ -20,7 +20,7 @@ Progress: [███░░░░░░░] 33%
 
 **Velocity:**
 - Total plans completed: 4
-- Average duration: 7 minutes
+- Average duration: 8 minutes
 - Total execution time: 0.5 hours
 
 **By Phase:**
@@ -28,13 +28,13 @@ Progress: [███░░░░░░░] 33%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 3 | 24 min | 8 min/plan |
-| 02 | 1 | 4 min | 4 min/plan |
+| 02 | 1 | 8 min | 8 min/plan |
 
 **Recent Completions:**
 | Phase 01 P01 | 4 min | 3 tasks | 12 files |
 | Phase 01 P02 | 5 | 3 tasks | 7 files |
 | Phase 01 P03 | 15 | 2 tasks | 3 files |
-| Phase 02 P02 | 4 | 3 tasks | 4 files |
+| Phase 02 P01 | 8 | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -58,10 +58,12 @@ Recent decisions affecting current work:
 - Railway used for production deployment with automatic HTTPS
 - ngrok for local development testing before production deployment
 - Human verification checkpoint required for telephony testing (cannot automate real phone calls)
-- [Phase 02]: Silero VAD over WebRTC VAD for ML-based detection with 0.93 F1 score
-- [Phase 02]: CPU inference for VAD to reserve GPU for Whisper/Gemma/CSM
-- [Phase 02]: 550ms silence threshold for turn detection (balances responsiveness vs false positives)
-- [Phase 02]: 300ms prefix padding buffer to prevent clipped words at speech start
+
+**Phase 02 decisions:**
+- Use distil-large-v3 model over large-v3 (6x faster with <1% WER loss)
+- Use int8 quantization on CPU, float16 on CUDA (11.3GB → 3.1GB VRAM)
+- Vendor whisper_streaming instead of pip install (not a standard package)
+- Create CustomFasterWhisperASR wrapper for CPU/macOS support
 
 ### Pending Todos
 
@@ -75,15 +77,16 @@ None yet.
 - Future: Context drift prevention architecture (token-level tracking) will be addressed in Phase 5
 
 **Validation needed during execution:**
+- Phase 2: VAD integration with STT (Plan 03) requires real PSTN audio quality testing
+- Phase 2: STT latency benchmarking needed to confirm sub-200ms transcription budget
 - Phase 3: Gemma 27B TTFT may be too slow (800ms) — decision point: stick with Gemma, switch to Gemma 9B, or use commercial API
 - Phase 4: CSM latency characteristics not documented — needs benchmarking to confirm sub-150ms TTS budget
-- Phase 2: VAD tuning requires real PSTN audio quality testing, not just development data
 
 ## Session Continuity
 
-Last session: 2026-02-23T03:05:00Z (plan execution)
-Stopped at: Completed 02-02-PLAN.md (Voice Activity Detection with Silero VAD)
-Resume file: .planning/phases/02-speech-to-text-with-streaming/02-02-SUMMARY.md
+Last session: 2026-02-23T03:08:23Z (plan execution)
+Stopped at: Completed 02-01-PLAN.md (Streaming Speech-to-Text Module)
+Resume file: .planning/phases/02-speech-to-text-with-streaming/02-01-SUMMARY.md
 
 ---
-*Next step: Execute plan 02-03 (Streaming STT with faster-whisper integration)*
+*Next step: Execute plan 02-02 (Voice Activity Detection with Silero VAD)*

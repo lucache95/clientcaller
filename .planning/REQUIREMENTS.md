@@ -16,7 +16,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Speech-to-Text
 
-- [ ] **STT-01**: System transcribes caller speech in real-time using faster-whisper streaming
+- [x] **STT-01**: System transcribes caller speech in real-time using faster-whisper streaming
 - [x] **STT-02**: System detects speech/silence boundaries using Silero VAD
 - [x] **STT-03**: System endpoints speech quickly (<300ms after caller stops) for fast response
 
@@ -95,7 +95,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TEL-02 | Phase 1 | Complete |
 | TEL-03 | Phase 1 | Complete |
 | TEL-04 | Phase 1 | Complete |
-| STT-01 | Phase 2 | Pending |
+| STT-01 | Phase 2 | Complete |
 | STT-02 | Phase 2 | Complete |
 | STT-03 | Phase 2 | Complete |
 | CONV-01 | Phase 3 | Pending |
