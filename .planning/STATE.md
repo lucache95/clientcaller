@@ -5,36 +5,42 @@
 See: .planning/PROJECT.md (updated 2026-02-21)
 
 **Core value:** The call must sound and feel like talking to a real person — natural voice, natural timing, no robotic pauses or awkward delays.
-**Current focus:** Phase 2 - Speech-to-Text with Streaming
+**Current focus:** Phase 3 complete — Ready for Phase 4 (Text-to-Speech)
 
 ## Current Position
 
-Phase: 2 of 6 (Speech-to-Text with Streaming)
-Plan: 1 of 3 (02-01-PLAN.md complete)
-Status: In progress
-Last activity: 2026-02-23 — Completed plan 02-01: Streaming Speech-to-Text Module
+Phase: 3 of 6 (Language Model with Streaming — COMPLETE)
+Plan: 3 of 3 (all plans executed)
+Status: Complete
+Last activity: 2026-02-23 — Completed Phase 3 (LLM client + conversation manager + handler integration)
 
-Progress: [███░░░░░░░] 33%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 8 minutes
-- Total execution time: 0.5 hours
+- Total plans completed: 9
+- Average duration: 5 minutes
+- Total execution time: 0.8 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 3 | 24 min | 8 min/plan |
-| 02 | 1 | 8 min | 8 min/plan |
+| 02 | 3 | 17 min | 6 min/plan |
+| 03 | 3 | 11 min | 4 min/plan |
 
 **Recent Completions:**
 | Phase 01 P01 | 4 min | 3 tasks | 12 files |
 | Phase 01 P02 | 5 | 3 tasks | 7 files |
 | Phase 01 P03 | 15 | 2 tasks | 3 files |
 | Phase 02 P01 | 8 | 3 tasks | 5 files |
+| Phase 02 P02 | 4 | 3 tasks | 4 files |
+| Phase 02 P03 | 5 | 2 tasks | 3 files |
+| Phase 03 P01 | 4 | 3 tasks | 6 files |
+| Phase 03 P02 | 3 | 2 tasks | 3 files |
+| Phase 03 P03 | 4 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -65,6 +71,14 @@ Recent decisions affecting current work:
 - Vendor whisper_streaming instead of pip install (not a standard package)
 - Create CustomFasterWhisperASR wrapper for CPU/macOS support
 
+**Phase 03 decisions:**
+- Use openai Python package with AsyncOpenAI for vLLM/RunPod compatibility
+- Shared LLM client (stateless), per-call ConversationManager (stateful)
+- Default system prompt for natural phone assistant behavior
+- Max 20 history messages (~2000 tokens, covers 10+ exchanges)
+- Graceful LLM error handling (logged, doesn't crash the call)
+- RunPod endpoint URL format: https://api.runpod.ai/v2/<ENDPOINT_ID>/openai/v1
+
 ### Pending Todos
 
 None yet.
@@ -84,9 +98,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-23T03:08:23Z (plan execution)
-Stopped at: Completed 02-01-PLAN.md (Streaming Speech-to-Text Module)
-Resume file: .planning/phases/02-speech-to-text-with-streaming/02-01-SUMMARY.md
+Last session: 2026-02-23 (plan execution)
+Stopped at: Completed Phase 3 (all 3 plans)
+Resume file: .planning/phases/03-language-model-with-streaming/03-03-SUMMARY.md
 
 ---
-*Next step: Execute plan 02-02 (Voice Activity Detection with Silero VAD)*
+*Next step: Plan and execute Phase 4 (Text-to-Speech with Streaming - CSM)*

@@ -13,8 +13,8 @@ Build a real-time AI phone calling system from the ground up, starting with Twil
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Telephony Foundation & Audio Pipeline** - Twilio WebSocket integration with bidirectional audio streaming (completed 2026-02-22)
-- [ ] **Phase 2: Speech-to-Text with Streaming** - Real-time speech transcription with VAD-based turn detection
-- [ ] **Phase 3: Language Model with Streaming** - Conversational responses via Gemma 3 27B with context retention
+- [x] **Phase 2: Speech-to-Text with Streaming** - Real-time speech transcription with VAD-based turn detection (completed 2026-02-23)
+- [x] **Phase 3: Language Model with Streaming** - Conversational responses via Gemma 3 27B with context retention (completed 2026-02-23)
 - [ ] **Phase 4: Text-to-Speech with Streaming** - Natural voice synthesis using CSM with conversational prosody
 - [ ] **Phase 5: Interruption Handling & Polish** - Barge-in capability with context drift prevention
 - [ ] **Phase 6: Cloud GPU Deployment & Production Hardening** - RunPod A100 deployment with concurrent model serving
@@ -49,9 +49,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Streaming STT module (faster-whisper + whisper_streaming)
-- [ ] 02-02-PLAN.md — VAD turn detection module (Silero VAD)
-- [ ] 02-03-PLAN.md — Integration + E2E testing (wire into handlers, test with calls)
+- [x] 02-01-PLAN.md — Streaming STT module (faster-whisper + whisper_streaming)
+- [x] 02-02-PLAN.md — VAD turn detection module (Silero VAD)
+- [x] 02-03-PLAN.md — Integration + E2E testing (wire into handlers, test with calls)
 
 ### Phase 3: Language Model with Streaming
 **Goal**: Natural conversational responses with streaming generation
@@ -61,10 +61,12 @@ Plans:
   1. System generates contextually relevant responses to user's speech
   2. System remembers conversation history within the same call (3+ turn exchanges)
   3. System begins response generation within 200ms of receiving transcript
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- TBD (populated during `/gsd:plan-phase 3`)
+- [x] 03-01-PLAN.md — LLM client module (OpenAI-compatible async client with streaming)
+- [x] 03-02-PLAN.md — Conversation manager (per-call history tracking)
+- [x] 03-03-PLAN.md — Integration + E2E testing (wire LLM into handlers)
 
 ### Phase 4: Text-to-Speech with Streaming
 **Goal**: Natural-sounding AI voice with conversational prosody
@@ -116,8 +118,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Telephony Foundation & Audio Pipeline | 3/3 | Complete   | 2026-02-22 |
-| 2. Speech-to-Text with Streaming | 0/3 | Not started | - |
-| 3. Language Model with Streaming | 0/? | Not started | - |
+| 2. Speech-to-Text with Streaming | 3/3 | Complete | 2026-02-23 |
+| 3. Language Model with Streaming | 3/3 | Complete | 2026-02-23 |
 | 4. Text-to-Speech with Streaming | 0/? | Not started | - |
 | 5. Interruption Handling & Polish | 0/? | Not started | - |
 | 6. Cloud GPU Deployment & Production Hardening | 0/? | Not started | - |
