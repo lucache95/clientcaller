@@ -9,6 +9,13 @@ class Settings(BaseSettings):
     server_host: str = Field(default="0.0.0.0", env="SERVER_HOST")
     server_port: int = Field(default=8000, env="SERVER_PORT")
 
+    # LLM Configuration (vLLM / RunPod)
+    llm_base_url: str = Field(default="http://localhost:8000/v1", env="LLM_BASE_URL")
+    llm_api_key: str = Field(default="EMPTY", env="LLM_API_KEY")
+    llm_model: str = Field(default="google/gemma-3-27b-it", env="LLM_MODEL")
+    llm_max_tokens: int = Field(default=256, env="LLM_MAX_TOKENS")
+    llm_temperature: float = Field(default=0.7, env="LLM_TEMPERATURE")
+
     class Config:
         env_file = ".env"
         case_sensitive = False

@@ -24,6 +24,9 @@ git+https://github.com/ufal/whisper_streaming  # Real-time streaming policy
 # Voice Activity Detection (VAD)
 silero-vad>=5.1  # ML-based VAD for speech/silence detection
 
+# Language Model (LLM) - OpenAI-compatible API client for vLLM/RunPod
+openai>=2.0.0
+
 # PyTorch for model loading (required for Silero VAD and Whisper)
 torch>=2.0.0
 torchaudio>=2.0.0
