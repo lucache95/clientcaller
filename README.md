@@ -2,16 +2,19 @@
 
 A real-time AI phone calling system powered by Twilio, featuring natural conversation with sub-500ms latency.
 
-## Current Status
+## Features
 
-**Phase 1: Telephony Foundation & Audio Pipeline** ✅ (In Testing)
+### Phase 1: Telephony Foundation ✓
+- Twilio WebSocket integration for bidirectional audio streaming
+- Audio format conversion (mu-law ↔ PCM)
+- Audio resampling (8kHz ↔ 16kHz)
+- Call state management
 
-- [x] FastAPI WebSocket server for Twilio Media Streams
-- [x] Audio format conversion (mu-law ↔ PCM, 8kHz ↔ 16kHz)
-- [x] Bidirectional streaming with backpressure handling
-- [x] Call state management and lifecycle tracking
-- [x] Outbound call initiation via Twilio SDK
-- [ ] End-to-end testing with real calls
+### Phase 2: Speech-to-Text with Streaming ✓
+- Real-time speech transcription using faster-whisper + whisper_streaming
+- Voice activity detection (VAD) using Silero VAD
+- Turn detection with <300ms latency
+- Streaming partial transcripts during speech
 
 ## Prerequisites
 
@@ -49,6 +52,13 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install --upgrade pip
 pip install -r requirements.txt
+```
+
+### Phase 2 Dependencies (STT + VAD)
+```bash
+pip install faster-whisper>=1.2.0
+pip install git+https://github.com/ufal/whisper_streaming
+pip install silero-vad>=5.1
 ```
 
 ### 2. Configure Environment Variables
@@ -121,7 +131,7 @@ Expected output:
 {"status": "healthy", "active_connections": 0}
 ```
 
-### End-to-End Call Test
+### Phase 1: Telephony Testing
 
 See [tests/test_e2e_call.md](tests/test_e2e_call.md) for detailed testing checklist.
 
@@ -130,13 +140,17 @@ See [tests/test_e2e_call.md](tests/test_e2e_call.md) for detailed testing checkl
 2. Start ngrok: `ngrok http 8000`
 3. Configure Twilio number with ngrok URL
 4. Call your Twilio number from your phone
-5. Speak into the phone - you should hear your voice echoed back
+
+### Phase 2: STT Testing
+
+See `tests/test_e2e_stt.md` for end-to-end speech transcription testing.
 
 **Expected behavior:**
-- Call connects within 2-3 seconds
-- Audio is echoed back (you hear yourself with slight delay)
-- Connection remains stable for duration of call
-- Logs show message types: connected → start → media → stop
+- Call Twilio number
+- Speak into phone
+- Check server logs for partial transcripts (real-time)
+- Stop speaking (pause 1-2 seconds)
+- Check server logs for final transcript (turn complete)
 
 ### Unit Tests
 
