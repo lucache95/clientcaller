@@ -62,16 +62,15 @@ class TestBargeInDetection:
     """Test that speech during AI response triggers barge-in."""
 
     @pytest.mark.asyncio
-    async def test_barge_in_sets_interrupt_event(self):
-        """Speech detected while AI is responding sets the interrupt event."""
+    async def test_barge_in_triggers_interrupt_handler(self):
+        """Speech detected while AI is responding triggers the interrupt handler."""
         from src.twilio.handlers import manager, handle_media
 
         stream_sid = "test_stream_barge"
 
         # Setup: AI is responding
         manager.is_responding[stream_sid] = True
-        event = manager.get_interrupt_event(stream_sid)
-        assert not event.is_set()
+        manager.get_interrupt_event(stream_sid)
 
         # Mock VAD to return speech
         mock_vad = MagicMock()
@@ -96,12 +95,16 @@ class TestBargeInDetection:
 
         with patch("src.twilio.handlers.mulaw_to_pcm", return_value=b"\x00" * 320), \
              patch("src.twilio.handlers.resample_8k_to_16k") as mock_resample, \
-             patch("src.twilio.handlers.asyncio.to_thread", side_effect=_fake_to_thread):
+             patch("src.twilio.handlers.asyncio.to_thread", side_effect=_fake_to_thread), \
+             patch("src.twilio.handlers._handle_interrupt", new_callable=AsyncMock) as mock_interrupt:
             import numpy as np
             mock_resample.return_value = np.zeros(512, dtype=np.int16)
             await handle_media(AsyncMock(), data)
 
-        assert event.is_set()
+        # Verify interrupt handler was called
+        mock_interrupt.assert_awaited_once()
+        call_args = mock_interrupt.call_args
+        assert call_args[0][1] == stream_sid  # stream_sid is second arg
 
         # Cleanup
         manager.vad_detectors.pop(stream_sid, None)

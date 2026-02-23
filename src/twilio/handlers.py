@@ -210,6 +210,49 @@ async def _generate_response(stream_sid: str, user_text: str):
         manager.response_tasks.pop(stream_sid, None)
 
 
+async def _handle_interrupt(websocket: WebSocket, stream_sid: str):
+    """
+    Handle a barge-in interrupt: cancel in-flight generation, clear audio, resume listening.
+
+    1. Cancel the active response task (LLM + TTS)
+    2. Clear the outbound audio queue
+    3. Send Twilio 'clear' message to flush server-side audio buffer
+    4. Reset interrupt event and responding flag
+    """
+    # Cancel the active response task
+    task = manager.response_tasks.get(stream_sid)
+    if task and not task.done():
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    # Clear the audio queue
+    call_sid = manager.stream_to_call.get(stream_sid)
+    streamer = manager.get_streamer(call_sid) if call_sid else None
+    if streamer:
+        await streamer.clear_queue()
+
+    # Send Twilio 'clear' message to flush server-side audio buffer
+    try:
+        clear_msg = json.dumps({"event": "clear", "streamSid": stream_sid})
+        await websocket.send_text(clear_msg)
+    except Exception as e:
+        logger.warning(f"[{stream_sid}] Failed to send clear message: {e}")
+
+    # Reset interrupt state
+    interrupt_event = manager.get_interrupt_event(stream_sid)
+    interrupt_event.clear()
+    manager.set_responding(stream_sid, False)
+
+    # Reset VAD for the new utterance
+    vad_detector = manager.get_vad_detector(stream_sid)
+    vad_detector.reset()
+
+    logger.info(f"[{stream_sid}] Interrupt handled — cleared queue, cancelled generation")
+
+
 async def handle_media(websocket: WebSocket, data: dict):
     """
     Process incoming audio through full conversation pipeline.
@@ -250,6 +293,7 @@ async def handle_media(websocket: WebSocket, data: dict):
         if not interrupt_event.is_set():
             interrupt_event.set()
             logger.info(f"[{stream_sid}] Barge-in detected — user interrupting AI")
+            await _handle_interrupt(websocket, stream_sid)
 
     if vad_result["is_speech"]:
         # Speech detected - feed to STT
