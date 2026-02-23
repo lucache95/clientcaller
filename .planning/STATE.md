@@ -5,34 +5,36 @@
 See: .planning/PROJECT.md (updated 2026-02-21)
 
 **Core value:** The call must sound and feel like talking to a real person — natural voice, natural timing, no robotic pauses or awkward delays.
-**Current focus:** Phase 1 - Telephony Foundation & Audio Pipeline
+**Current focus:** Phase 2 - Speech-to-Text with Streaming
 
 ## Current Position
 
-Phase: 1 of 6 (Telephony Foundation & Audio Pipeline)
-Plan: 3 of 3 (01-03-PLAN.md complete)
-Status: Phase complete
-Last activity: 2026-02-22 — Completed plan 01-03: Testing Infrastructure & End-to-End Validation
+Phase: 2 of 6 (Speech-to-Text with Streaming)
+Plan: 2 of 3 (02-02-PLAN.md complete)
+Status: In progress
+Last activity: 2026-02-23 — Completed plan 02-02: Voice Activity Detection with Silero VAD
 
-Progress: [██████████] 100%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 8 minutes
-- Total execution time: 0.4 hours
+- Total plans completed: 4
+- Average duration: 7 minutes
+- Total execution time: 0.5 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 3 | 24 min | 8 min/plan |
+| 02 | 1 | 4 min | 4 min/plan |
 
 **Recent Completions:**
 | Phase 01 P01 | 4 min | 3 tasks | 12 files |
 | Phase 01 P02 | 5 | 3 tasks | 7 files |
 | Phase 01 P03 | 15 | 2 tasks | 3 files |
+| Phase 02 P02 | 4 | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -56,6 +58,10 @@ Recent decisions affecting current work:
 - Railway used for production deployment with automatic HTTPS
 - ngrok for local development testing before production deployment
 - Human verification checkpoint required for telephony testing (cannot automate real phone calls)
+- [Phase 02]: Silero VAD over WebRTC VAD for ML-based detection with 0.93 F1 score
+- [Phase 02]: CPU inference for VAD to reserve GPU for Whisper/Gemma/CSM
+- [Phase 02]: 550ms silence threshold for turn detection (balances responsiveness vs false positives)
+- [Phase 02]: 300ms prefix padding buffer to prevent clipped words at speech start
 
 ### Pending Todos
 
@@ -75,9 +81,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-22T09:13:00Z (plan execution)
-Stopped at: Completed 01-03-PLAN.md (Testing Infrastructure & End-to-End Validation)
-Resume file: .planning/phases/01-telephony-foundation-audio-pipeline/01-03-SUMMARY.md
+Last session: 2026-02-23T03:05:00Z (plan execution)
+Stopped at: Completed 02-02-PLAN.md (Voice Activity Detection with Silero VAD)
+Resume file: .planning/phases/02-speech-to-text-with-streaming/02-02-SUMMARY.md
 
 ---
-*Next step: `/gsd:plan-phase 2` to plan Phase 2: Speech Processing & STT Integration*
+*Next step: Execute plan 02-03 (Streaming STT with faster-whisper integration)*
