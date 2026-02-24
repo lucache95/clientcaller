@@ -1,3 +1,6 @@
+# CPU-only PyTorch (much smaller than CUDA version)
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 # System dependencies (install separately):
 # macOS: brew install ffmpeg
 # Linux: sudo apt-get install ffmpeg
