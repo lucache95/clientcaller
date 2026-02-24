@@ -94,7 +94,6 @@ class ConnectionManager:
         self.is_responding[stream_sid] = responding
 
     async def connect(self, call_sid: str, stream_sid: str, websocket: WebSocket):
-        await websocket.accept()
         self.active_connections[call_sid] = websocket
 
         # Create and start AudioStreamer
@@ -121,6 +120,10 @@ class ConnectionManager:
 
     def get_streamer(self, call_sid: str) -> Optional[AudioStreamer]:
         return self.streamers.get(call_sid)
+
+    def get_active_call_count(self) -> int:
+        """Get number of active WebSocket connections."""
+        return len(self.active_connections)
 
 
 manager = ConnectionManager()
@@ -396,6 +399,11 @@ async def handle_stop(websocket: WebSocket, data: dict):
         manager.interrupt_events.pop(stream_sid, None)
         manager.is_responding.pop(stream_sid, None)
         manager.response_tasks.pop(stream_sid, None)
+
+        # Clear CSM speaker context if using CSM TTS
+        tts_stream = manager.tts_stream
+        if tts_stream and hasattr(tts_stream.tts_client, "clear_context"):
+            tts_stream.tts_client.clear_context()
 
 
 # Message router
