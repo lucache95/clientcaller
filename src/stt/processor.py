@@ -85,8 +85,11 @@ class STTProcessor:
         """
         # Auto-detect device and compute_type if not specified
         if device is None:
-            # Use CPU on macOS, CUDA on Linux with GPU
-            device = "cpu" if platform.system() == "Darwin" else "cuda"
+            from src.config import settings
+            if settings.use_gpu:
+                device = "cuda"
+            else:
+                device = "cpu"
 
         if compute_type is None:
             # Use int8 on CPU, float16 on CUDA

@@ -22,12 +22,13 @@ class VADDetector:
             prefix_padding_ms: Audio to include before speech starts (avoid clipped words)
             sampling_rate: Must be 8000 or 16000 (Silero VAD requirement)
         """
-        # Load Silero VAD via torch.hub (CPU inference)
+        # Load Silero VAD via torch.hub (forced CPU inference)
         self.model, utils = torch.hub.load(
             repo_or_dir='snakers4/silero-vad',
             model='silero_vad',
             force_reload=False
         )
+        self.model = self.model.cpu()
 
         # Extract utility functions
         (self.get_speech_timestamps, _, _,
