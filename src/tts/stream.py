@@ -40,17 +40,29 @@ def resample_to_8k(audio: np.ndarray, orig_sr: int) -> np.ndarray:
     return resampled.astype(np.int16)
 
 
+def create_tts_client(config: TTSConfig):
+    """Create the appropriate TTS client based on engine config."""
+    if config.engine == "csm":
+        from src.tts.csm_client import CSMTTSClient
+        client = CSMTTSClient(config=config)
+        client.load_model(device="cuda")
+        return client
+    return TTSClient(config=config)
+
+
 class TTSStream:
     """
     Streaming pipeline: text → TTS → resampled PCM → mu-law base64.
 
     Produces payloads ready to send to Twilio via AudioStreamer.
     Each payload is one 20ms chunk of base64-encoded mu-law audio.
+    Routes to edge-tts (CPU) or CSM (GPU) based on config.
     """
 
     def __init__(self, config: Optional[TTSConfig] = None):
-        self.tts_client = TTSClient(config=config)
-        self.config = self.tts_client.config
+        config = config or TTSConfig()
+        self.tts_client = create_tts_client(config)
+        self.config = config
 
     async def generate(self, text: str) -> AsyncGenerator[str, None]:
         """

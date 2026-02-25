@@ -1,7 +1,13 @@
+import asyncio
 import json
 import logging
+import signal
+import time
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
+
 from src.config import settings
 from src.twilio.handlers import MESSAGE_HANDLERS, manager, state_manager
 from src.twilio.client import generate_twiml, create_outbound_call
@@ -13,48 +19,122 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Client Caller - Telephony Server")
+
+# Call metrics for /metrics endpoint
+class CallMetrics:
+    def __init__(self):
+        self.total_calls: int = 0
+        self.total_errors: int = 0
+        self.total_latency_ms: float = 0.0
+        self.call_start_times: dict[str, float] = {}
+
+    def on_call_start(self, call_sid: str):
+        self.total_calls += 1
+        self.call_start_times[call_sid] = time.monotonic()
+
+    def on_call_end(self, call_sid: str):
+        start = self.call_start_times.pop(call_sid, None)
+        if start:
+            self.total_latency_ms += (time.monotonic() - start) * 1000
+
+    def on_error(self):
+        self.total_errors += 1
+
+    @property
+    def avg_call_duration_ms(self) -> float:
+        completed = self.total_calls - len(self.call_start_times)
+        if completed <= 0:
+            return 0.0
+        return self.total_latency_ms / completed
+
+
+metrics = CallMetrics()
+
+# Graceful shutdown state
+_shutdown_event = asyncio.Event()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown lifecycle."""
+    logger.info(
+        f"Client Caller starting: gpu={settings.use_gpu}, "
+        f"tts={settings.tts_engine}, max_calls={settings.max_concurrent_calls}"
+    )
+
+    # Register SIGTERM handler for graceful shutdown
+    loop = asyncio.get_event_loop()
+
+    def _signal_handler():
+        logger.info("SIGTERM received — initiating graceful shutdown")
+        _shutdown_event.set()
+
+    loop.add_signal_handler(signal.SIGTERM, _signal_handler)
+
+    yield
+
+    # Shutdown: wait for active calls to finish (up to 30s)
+    active = manager.get_active_call_count()
+    if active > 0:
+        logger.info(f"Graceful shutdown: waiting for {active} active call(s)")
+        for _ in range(30):
+            if manager.get_active_call_count() == 0:
+                break
+            await asyncio.sleep(1)
+    logger.info("Client Caller shut down")
+
+
+app = FastAPI(title="Client Caller - Telephony Server", lifespan=lifespan)
 
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Health check with model status and call count."""
+    active = manager.get_active_call_count()
     return {
         "status": "healthy",
-        "active_connections": len(manager.active_connections)
+        "active_calls": active,
+        "max_concurrent_calls": settings.max_concurrent_calls,
+        "tts_engine": settings.tts_engine,
+        "gpu_enabled": settings.use_gpu,
+        "stt_loaded": manager.stt_processor is not None,
+        "tts_loaded": manager.tts_stream is not None,
     }
+
+
+@app.get("/metrics")
+async def metrics_endpoint():
+    """Prometheus-compatible metrics."""
+    active = manager.get_active_call_count()
+    lines = [
+        f"# HELP client_caller_calls_total Total calls handled",
+        f"# TYPE client_caller_calls_total counter",
+        f"client_caller_calls_total {metrics.total_calls}",
+        f"# HELP client_caller_calls_active Currently active calls",
+        f"# TYPE client_caller_calls_active gauge",
+        f"client_caller_calls_active {active}",
+        f"# HELP client_caller_errors_total Total errors",
+        f"# TYPE client_caller_errors_total counter",
+        f"client_caller_errors_total {metrics.total_errors}",
+        f"# HELP client_caller_avg_call_duration_ms Average call duration",
+        f"# TYPE client_caller_avg_call_duration_ms gauge",
+        f"client_caller_avg_call_duration_ms {metrics.avg_call_duration_ms:.1f}",
+    ]
+    return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain")
 
 
 @app.get("/twiml")
 async def twiml_endpoint(request: Request):
-    """
-    Serve TwiML to establish Media Stream.
-
-    This endpoint can be configured as the Voice URL for a Twilio phone number
-    to handle inbound calls.
-    """
+    """Serve TwiML to establish Media Stream."""
     host = request.headers.get("host", settings.server_host)
     websocket_url = f"wss://{host}/ws"
-
     twiml = generate_twiml(websocket_url)
     return Response(content=twiml, media_type="application/xml")
 
 
 @app.post("/call/outbound")
 async def initiate_outbound_call(to_number: str, websocket_url: str):
-    """
-    API endpoint to initiate an outbound call.
-
-    Args:
-        to_number: Phone number to call (E.164 format)
-        websocket_url: WebSocket URL for Media Streams (typically ngrok URL for dev)
-
-    Returns:
-        Call details including call_sid
-
-    Example:
-        POST /call/outbound?to_number=+15551234567&websocket_url=wss://abc123.ngrok.io/ws
-    """
+    """Initiate an outbound call."""
     try:
         result = await create_outbound_call(to_number, websocket_url)
         return result
@@ -64,11 +144,16 @@ async def initiate_outbound_call(to_number: str, websocket_url: str):
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """
-    WebSocket endpoint for Twilio Media Streams.
+    """WebSocket endpoint for Twilio Media Streams."""
+    # Connection limiting: reject if at capacity
+    if manager.get_active_call_count() >= settings.max_concurrent_calls:
+        logger.warning(
+            f"Connection rejected: at capacity "
+            f"({settings.max_concurrent_calls} concurrent calls)"
+        )
+        await websocket.close(code=1013)  # 1013 = Try Again Later
+        return
 
-    Handles bidirectional audio streaming with message-based protocol.
-    """
     await websocket.accept()
     call_sid = None
 
@@ -82,9 +167,11 @@ async def websocket_endpoint(websocket: WebSocket):
                     logger.warning(f"Received message without event type: {message[:100]}")
                     continue
 
-                # Track call_sid from start message for cleanup
+                # Track call_sid from start message for cleanup and metrics
                 if event == "start":
                     call_sid = data.get("start", {}).get("callSid")
+                    if call_sid:
+                        metrics.on_call_start(call_sid)
 
                 # Route to appropriate handler
                 handler = MESSAGE_HANDLERS.get(event)
@@ -95,16 +182,20 @@ async def websocket_endpoint(websocket: WebSocket):
 
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse JSON message: {e}")
+                metrics.on_error()
             except Exception as e:
                 logger.error(f"Error handling message: {e}", exc_info=True)
+                metrics.on_error()
 
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected: {call_sid}")
     except Exception as e:
         logger.error(f"WebSocket error: {e}", exc_info=True)
+        metrics.on_error()
     finally:
         # Cleanup on disconnect
         if call_sid:
+            metrics.on_call_end(call_sid)
             await manager.disconnect(call_sid)
             await state_manager.cleanup(call_sid)
 

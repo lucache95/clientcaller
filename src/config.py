@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     tts_voice: str = Field(default="en-US-AriaNeural", env="TTS_VOICE")
     tts_rate: str = Field(default="+0%", env="TTS_RATE")
 
+    # GPU / Production Configuration
+    use_gpu: bool = Field(default=False, env="USE_GPU")
+    hf_token: str = Field(default="", env="HF_TOKEN")
+    max_concurrent_calls: int = Field(default=10, env="MAX_CONCURRENT_CALLS")
+    csm_speaker_id: int = Field(default=0, env="CSM_SPEAKER_ID")
+    csm_max_context_segments: int = Field(default=3, env="CSM_MAX_CONTEXT_SEGMENTS")
+
     class Config:
         env_file = ".env"
         case_sensitive = False
