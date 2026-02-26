@@ -68,10 +68,9 @@ class VADDetector:
                 "speech_probability": float
             }
         """
-        # Accumulate short chunks until we have enough for Silero (>= 512 samples)
+        # Accumulate chunks — Silero requires exactly 512 samples at 16kHz
         self.accum_buffer = np.concatenate([self.accum_buffer, audio_chunk])
         if len(self.accum_buffer) < self.min_samples:
-            # Not enough samples yet, return neutral result
             return {
                 "is_speech": self.is_speaking,
                 "turn_complete": False,
@@ -79,20 +78,23 @@ class VADDetector:
                 "silence_duration_ms": self.silence_duration_ms,
                 "speech_duration_ms": self.speech_duration_ms
             }
-        # Use accumulated buffer and reset
-        audio_chunk = self.accum_buffer
-        self.accum_buffer = np.array([], dtype=np.int16)
 
-        # Convert int16 to float32 normalized to [-1, 1]
-        audio_float = audio_chunk.astype(np.float32) / 32768.0
+        # Process all complete 512-sample windows, keep remainder
+        last_result = None
+        while len(self.accum_buffer) >= self.min_samples:
+            window = self.accum_buffer[:self.min_samples]
+            self.accum_buffer = self.accum_buffer[self.min_samples:]
 
-        # Convert to torch tensor
-        audio_tensor = torch.from_numpy(audio_float)
+            audio_float = window.astype(np.float32) / 32768.0
+            audio_tensor = torch.from_numpy(audio_float)
+            speech_prob = self.model(audio_tensor, self.sampling_rate).item()
 
-        # Run VAD inference (returns speech probability 0-1)
-        speech_prob = self.model(audio_tensor, self.sampling_rate).item()
+            last_result = self._update_state(window, speech_prob)
 
-        # Detect speech based on threshold
+        return last_result
+
+    def _update_state(self, audio_chunk: np.ndarray, speech_prob: float) -> Dict[str, any]:
+        """Update VAD state for a single 512-sample window."""
         is_speech = speech_prob > self.threshold
 
         # Update prefix buffer (always maintain last 300ms)
@@ -105,10 +107,8 @@ class VADDetector:
 
         if is_speech:
             self.speech_duration_ms += chunk_duration_ms
-            self.silence_duration_ms = 0  # Reset silence counter
-
+            self.silence_duration_ms = 0
             if not self.is_speaking:
-                # Transition: silence → speech
                 self.is_speaking = True
         else:
             self.silence_duration_ms += chunk_duration_ms
@@ -116,7 +116,6 @@ class VADDetector:
         # Check for turn completion
         turn_complete = False
         if self.is_speaking and self.silence_duration_ms >= self.min_silence_ms:
-            # Sufficient silence after speech → turn complete
             if self.speech_duration_ms >= self.min_speech_ms:
                 turn_complete = True
 
