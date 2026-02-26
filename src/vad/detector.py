@@ -50,6 +50,10 @@ class VADDetector:
         self.prefix_buffer = []
         self.prefix_buffer_max = int(prefix_padding_ms / 20)  # 20ms chunks
 
+        # Accumulation buffer for short chunks (Silero needs >= 512 samples at 16kHz)
+        self.min_samples = 512
+        self.accum_buffer = np.array([], dtype=np.int16)
+
     def process_chunk(self, audio_chunk: np.ndarray) -> Dict[str, any]:
         """
         Process audio chunk and detect speech/silence transitions.
@@ -64,6 +68,21 @@ class VADDetector:
                 "speech_probability": float
             }
         """
+        # Accumulate short chunks until we have enough for Silero (>= 512 samples)
+        self.accum_buffer = np.concatenate([self.accum_buffer, audio_chunk])
+        if len(self.accum_buffer) < self.min_samples:
+            # Not enough samples yet, return neutral result
+            return {
+                "is_speech": self.is_speaking,
+                "turn_complete": False,
+                "speech_probability": 0.0,
+                "silence_duration_ms": self.silence_duration_ms,
+                "speech_duration_ms": self.speech_duration_ms
+            }
+        # Use accumulated buffer and reset
+        audio_chunk = self.accum_buffer
+        self.accum_buffer = np.array([], dtype=np.int16)
+
         # Convert int16 to float32 normalized to [-1, 1]
         audio_float = audio_chunk.astype(np.float32) / 32768.0
 
@@ -126,3 +145,4 @@ class VADDetector:
         self.silence_duration_ms = 0
         self.speech_duration_ms = 0
         self.prefix_buffer = []
+        self.accum_buffer = np.array([], dtype=np.int16)
