@@ -339,7 +339,7 @@ async def handle_media(websocket: WebSocket, data: dict):
 
     if vad_result["is_speech"]:
         # Speech detected - feed to STT
-        async def process_stt():
+        def process_stt():
             partials = []
             for partial in stt_processor.process_audio_chunk(pcm_16khz):
                 partials.append(partial)
