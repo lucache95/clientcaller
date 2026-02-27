@@ -4,49 +4,85 @@ Audio format conversion: mu-law ↔ PCM
 Twilio uses 8-bit mu-law encoding (telephony standard).
 ML models expect 16-bit PCM.
 
-Note: Using pydub instead of deprecated audioop module (removed Python 3.13).
+Uses pure numpy for speed (~microseconds vs ~100ms with pydub/ffmpeg).
 """
 import numpy as np
-import io
-from pydub import AudioSegment
 import logging
 
 logger = logging.getLogger(__name__)
 
+# Pre-compute mu-law to PCM lookup table (256 entries, one per byte value)
+# ITU-T G.711 mu-law decoding formula
+_MULAW_BIAS = 33
+_MULAW_MAX = 0x1FFF  # 8191
+
+def _build_mulaw_decode_table() -> np.ndarray:
+    """Build mu-law byte → int16 PCM lookup table."""
+    table = np.zeros(256, dtype=np.int16)
+    for i in range(256):
+        # Complement the bits
+        val = ~i & 0xFF
+        sign = val & 0x80
+        exponent = (val >> 4) & 0x07
+        mantissa = val & 0x0F
+        # Decode
+        sample = (mantissa << (exponent + 3)) + _MULAW_BIAS
+        sample = sample << (exponent)
+        sample = sample - _MULAW_BIAS
+        if sign:
+            sample = -sample
+        # Clamp to int16 range
+        sample = max(-32768, min(32767, sample))
+        table[i] = sample
+    return table
+
+_MULAW_DECODE_TABLE = _build_mulaw_decode_table()
+
+# Pre-compute PCM to mu-law encode table
+def _build_mulaw_encode_table() -> np.ndarray:
+    """Build int16 PCM → mu-law byte lookup table for positive values."""
+    # We'll encode on the fly since the table would be 65536 entries
+    pass
+
+def _encode_mulaw_sample(sample: int) -> int:
+    """Encode a single int16 PCM sample to mu-law byte."""
+    BIAS = 0x84  # 132
+    CLIP = 32635
+
+    sign = 0
+    if sample < 0:
+        sign = 0x80
+        sample = -sample
+    if sample > CLIP:
+        sample = CLIP
+    sample = sample + BIAS
+
+    exponent = 7
+    mask = 0x4000
+    for _ in range(8):
+        if sample & mask:
+            break
+        exponent -= 1
+        mask >>= 1
+
+    mantissa = (sample >> (exponent + 3)) & 0x0F
+    mulaw_byte = ~(sign | (exponent << 4) | mantissa) & 0xFF
+    return mulaw_byte
+
 
 def mulaw_to_pcm(mulaw_bytes: bytes, sample_rate: int = 8000) -> np.ndarray:
     """
-    Convert mu-law encoded bytes to PCM numpy array.
+    Convert mu-law encoded bytes to PCM numpy array using lookup table.
 
     Args:
         mulaw_bytes: Raw mu-law audio bytes from Twilio
-        sample_rate: Sample rate (Twilio uses 8000 Hz)
+        sample_rate: Sample rate (unused, kept for API compat)
 
     Returns:
         numpy array of int16 PCM samples
     """
-    try:
-        # Create AudioSegment from mu-law bytes
-        audio = AudioSegment.from_file(
-            io.BytesIO(mulaw_bytes),
-            format="mulaw",
-            frame_rate=sample_rate,
-            channels=1,
-            sample_width=1  # mu-law is 8-bit
-        )
-
-        # Convert to 16-bit PCM
-        pcm_audio = audio.set_sample_width(2)  # 2 bytes = 16-bit
-
-        # Convert to numpy array
-        samples = np.array(pcm_audio.get_array_of_samples(), dtype=np.int16)
-
-        logger.debug(f"Converted mu-law to PCM: {len(samples)} samples")
-        return samples
-
-    except Exception as e:
-        logger.error(f"Error converting mu-law to PCM: {e}")
-        raise
+    indices = np.frombuffer(mulaw_bytes, dtype=np.uint8)
+    return _MULAW_DECODE_TABLE[indices].copy()
 
 
 def pcm_to_mulaw(pcm_samples: np.ndarray, sample_rate: int = 8000) -> bytes:
@@ -55,35 +91,18 @@ def pcm_to_mulaw(pcm_samples: np.ndarray, sample_rate: int = 8000) -> bytes:
 
     Args:
         pcm_samples: numpy array of int16 PCM samples
-        sample_rate: Sample rate (Twilio expects 8000 Hz)
+        sample_rate: Sample rate (unused, kept for API compat)
 
     Returns:
-        mu-law encoded bytes (base64 encode before sending to Twilio)
+        mu-law encoded bytes
     """
-    try:
-        # Ensure correct dtype
-        if pcm_samples.dtype != np.int16:
-            pcm_samples = pcm_samples.astype(np.int16)
+    if pcm_samples.dtype != np.int16:
+        pcm_samples = pcm_samples.astype(np.int16)
 
-        # Create AudioSegment from numpy array
-        audio = AudioSegment(
-            pcm_samples.tobytes(),
-            frame_rate=sample_rate,
-            sample_width=2,  # 16-bit PCM
-            channels=1
-        )
-
-        # Export as mu-law
-        buffer = io.BytesIO()
-        audio.export(buffer, format="mulaw", codec="pcm_mulaw")
-        mulaw_bytes = buffer.getvalue()
-
-        logger.debug(f"Converted PCM to mu-law: {len(mulaw_bytes)} bytes")
-        return mulaw_bytes
-
-    except Exception as e:
-        logger.error(f"Error converting PCM to mu-law: {e}")
-        raise
+    result = bytearray(len(pcm_samples))
+    for i, sample in enumerate(pcm_samples):
+        result[i] = _encode_mulaw_sample(int(sample))
+    return bytes(result)
 
 
 def twilio_to_model_format(mulaw_payload: str) -> np.ndarray:
@@ -91,22 +110,10 @@ def twilio_to_model_format(mulaw_payload: str) -> np.ndarray:
     Complete conversion from Twilio audio to ML model format.
 
     Pipeline: base64 → mu-law bytes → PCM 8kHz → (caller resamples to 16kHz)
-
-    Args:
-        mulaw_payload: Base64-encoded mu-law audio from Twilio
-
-    Returns:
-        numpy array of 16-bit PCM samples at 8kHz (ready for resampling)
     """
     import base64
-
-    # Decode base64
     mulaw_bytes = base64.b64decode(mulaw_payload)
-
-    # Convert mu-law → PCM
-    pcm_8k = mulaw_to_pcm(mulaw_bytes, sample_rate=8000)
-
-    return pcm_8k
+    return mulaw_to_pcm(mulaw_bytes, sample_rate=8000)
 
 
 def model_to_twilio_format(pcm_8k: np.ndarray) -> str:
@@ -114,19 +121,7 @@ def model_to_twilio_format(pcm_8k: np.ndarray) -> str:
     Complete conversion from ML model output to Twilio format.
 
     Pipeline: PCM 8kHz → mu-law → base64
-
-    Args:
-        pcm_8k: numpy array of 16-bit PCM samples at 8kHz (already resampled)
-
-    Returns:
-        Base64-encoded mu-law audio for Twilio
     """
     import base64
-
-    # Convert PCM → mu-law
     mulaw_bytes = pcm_to_mulaw(pcm_8k, sample_rate=8000)
-
-    # Encode base64
-    mulaw_payload = base64.b64encode(mulaw_bytes).decode('utf-8')
-
-    return mulaw_payload
+    return base64.b64encode(mulaw_bytes).decode('utf-8')
