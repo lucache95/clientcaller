@@ -321,9 +321,23 @@ async def handle_media(websocket: WebSocket, data: dict):
     # Decode Twilio audio
     audio_mulaw = base64.b64decode(payload)
 
-    # Audio conversion pipeline
+    # Audio conversion pipeline with debug logging (first few chunks only)
+    if not hasattr(handle_media, '_audio_debug_count'):
+        handle_media._audio_debug_count = {}
+    handle_media._audio_debug_count[stream_sid] = handle_media._audio_debug_count.get(stream_sid, 0) + 1
+    debug_audio = handle_media._audio_debug_count[stream_sid] <= 3
+
+    if debug_audio:
+        logger.info(f"[{stream_sid}] RAW mulaw: {len(audio_mulaw)} bytes, first 10: {list(audio_mulaw[:10])}")
+
     pcm_8khz = mulaw_to_pcm(audio_mulaw)
+    if debug_audio:
+        import numpy as np
+        logger.info(f"[{stream_sid}] PCM 8kHz: len={len(pcm_8khz)}, dtype={pcm_8khz.dtype}, min={pcm_8khz.min()}, max={pcm_8khz.max()}, rms={np.sqrt(np.mean(pcm_8khz.astype(np.float64)**2)):.1f}")
+
     pcm_16khz = resample_8k_to_16k(pcm_8khz)
+    if debug_audio:
+        logger.info(f"[{stream_sid}] PCM 16kHz: len={len(pcm_16khz)}, dtype={pcm_16khz.dtype}, min={pcm_16khz.min()}, max={pcm_16khz.max()}, rms={np.sqrt(np.mean(pcm_16khz.astype(np.float64)**2)):.1f}")
 
     # Get processors
     stt_processor = manager.get_stt_processor()
