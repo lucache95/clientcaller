@@ -46,6 +46,9 @@ class ConnectionManager:
         self.is_responding: Dict[str, bool] = {}
         self.response_tasks: Dict[str, asyncio.Task] = {}
 
+        # Speech audio buffers for batch STT (per stream)
+        self.speech_buffers: Dict[str, list] = {}
+
     def get_stt_processor(self):
         """Get or create shared STT processor"""
         if self.stt_processor is None:
@@ -352,25 +355,33 @@ async def handle_media(websocket: WebSocket, data: dict):
             await _handle_interrupt(websocket, stream_sid)
 
     if vad_result["is_speech"]:
-        # Speech detected - feed to STT in thread (Whisper CPU inference is slow)
-        def run_stt():
-            results = []
-            for partial in stt_processor.process_audio_chunk(pcm_16khz):
-                results.append(partial)
-            return results
-
-        partials = await asyncio.to_thread(run_stt)
-        for partial in partials:
-            if partial["type"] == "partial":
-                logger.info(f"[{stream_sid}] Partial: {partial['text']}")
+        # Buffer speech audio for batch transcription on turn-complete
+        # (Whisper is too slow on CPU to run per-chunk)
+        if stream_sid not in manager.speech_buffers:
+            manager.speech_buffers[stream_sid] = []
+        manager.speech_buffers[stream_sid].append(pcm_16khz)
 
     # Check for turn complete
     if vad_result["turn_complete"]:
         logger.info(f"[{stream_sid}] Turn complete after {vad_result['silence_duration_ms']}ms silence")
 
-        # Finalize STT transcript
-        final = await asyncio.to_thread(stt_processor.finalize_turn)
-        user_text = final["text"]
+        # Transcribe all buffered speech audio at once
+        speech_chunks = manager.speech_buffers.pop(stream_sid, [])
+        if speech_chunks:
+            import numpy as np
+            full_audio = np.concatenate(speech_chunks)
+            logger.info(f"[{stream_sid}] Transcribing {len(full_audio)} samples ({len(full_audio)/16000:.1f}s)")
+
+            def batch_transcribe():
+                audio_float = full_audio.astype(np.float32) / 32768.0
+                stt_processor.online.insert_audio_chunk(audio_float)
+                beg, end, text = stt_processor.online.finish()
+                stt_processor.online.init()
+                return text
+
+            user_text = await asyncio.to_thread(batch_transcribe)
+        else:
+            user_text = ""
         logger.info(f"[{stream_sid}] User said: {user_text}")
 
         if user_text and user_text.strip():
