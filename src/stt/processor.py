@@ -64,7 +64,7 @@ class STTProcessor:
     - Resets state between turns to prevent context bleed
     """
 
-    def __init__(self, model_size: str = "distil-large-v3", language: str = "en",
+    def __init__(self, model_size: str = "base.en", language: str = "en",
                  device: str = None, compute_type: str = None):
         """
         Initialize streaming STT processor.

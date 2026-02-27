@@ -50,7 +50,7 @@ class ConnectionManager:
         """Get or create shared STT processor"""
         if self.stt_processor is None:
             self.stt_processor = STTProcessor(
-                model_size="distil-large-v3",
+                model_size="base.en",
                 language="en"
             )
         return self.stt_processor
@@ -352,8 +352,15 @@ async def handle_media(websocket: WebSocket, data: dict):
             await _handle_interrupt(websocket, stream_sid)
 
     if vad_result["is_speech"]:
-        # Speech detected - feed to STT (sync generator, fast CPU work)
-        for partial in stt_processor.process_audio_chunk(pcm_16khz):
+        # Speech detected - feed to STT in thread (Whisper CPU inference is slow)
+        def run_stt():
+            results = []
+            for partial in stt_processor.process_audio_chunk(pcm_16khz):
+                results.append(partial)
+            return results
+
+        partials = await asyncio.to_thread(run_stt)
+        for partial in partials:
             if partial["type"] == "partial":
                 logger.info(f"[{stream_sid}] Partial: {partial['text']}")
 
