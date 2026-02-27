@@ -62,6 +62,16 @@ async def lifespan(app: FastAPI):
         f"tts={settings.tts_engine}, max_calls={settings.max_concurrent_calls}"
     )
 
+    # Pre-load models so first call doesn't wait for downloads
+    logger.info("Pre-loading STT model (faster-whisper)...")
+    await asyncio.to_thread(manager.get_stt_processor)
+    logger.info("STT model loaded")
+
+    logger.info("Pre-loading VAD model (Silero)...")
+    await asyncio.to_thread(lambda: manager.get_vad_detector("__warmup__"))
+    manager.vad_detectors.pop("__warmup__", None)
+    logger.info("VAD model loaded")
+
     # Register SIGTERM handler for graceful shutdown
     loop = asyncio.get_event_loop()
 
