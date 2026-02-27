@@ -329,6 +329,20 @@ async def handle_media(websocket: WebSocket, data: dict):
     # Run VAD on chunk
     vad_result = vad_detector.process_chunk(pcm_16khz)
 
+    # Debug: log VAD state periodically (every ~5s = 250 chunks at 20ms)
+    if not hasattr(handle_media, '_debug_counter'):
+        handle_media._debug_counter = {}
+    handle_media._debug_counter[stream_sid] = handle_media._debug_counter.get(stream_sid, 0) + 1
+    if handle_media._debug_counter[stream_sid] % 250 == 1:
+        logger.info(
+            f"[{stream_sid}] VAD debug: speech={vad_result['is_speech']}, "
+            f"prob={vad_result['speech_probability']:.3f}, "
+            f"speaking={vad_detector.is_speaking}, "
+            f"silence={vad_result['silence_duration_ms']:.0f}ms, "
+            f"speech_dur={vad_result['speech_duration_ms']:.0f}ms, "
+            f"pcm_len={len(pcm_16khz)}"
+        )
+
     # Barge-in detection: user speaking while AI is responding
     if vad_result["is_speech"] and manager.is_responding.get(stream_sid, False):
         interrupt_event = manager.get_interrupt_event(stream_sid)
