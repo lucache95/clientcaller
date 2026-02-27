@@ -36,13 +36,15 @@ def generate_twiml(websocket_url: str) -> str:
         TwiML XML string
     """
     response = VoiceResponse()
+    # Say greeting first to establish audio path before streaming
+    response.say("Hello, how can I help you today?", voice="Polly.Amy")
     connect = Connect()
-    stream = Stream(url=websocket_url)
+    stream = Stream(url=websocket_url, track="inbound_track")
     connect.append(stream)
     response.append(connect)
 
     twiml_str = str(response)
-    logger.debug(f"Generated TwiML: {twiml_str}")
+    logger.info(f"Generated TwiML: {twiml_str}")
     return twiml_str
 
 async def create_outbound_call(
