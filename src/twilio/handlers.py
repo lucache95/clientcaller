@@ -352,15 +352,8 @@ async def handle_media(websocket: WebSocket, data: dict):
             await _handle_interrupt(websocket, stream_sid)
 
     if vad_result["is_speech"]:
-        # Speech detected - feed to STT
-        def process_stt():
-            partials = []
-            for partial in stt_processor.process_audio_chunk(pcm_16khz):
-                partials.append(partial)
-            return partials
-
-        partials = await asyncio.to_thread(process_stt)
-        for partial in partials:
+        # Speech detected - feed to STT (sync generator, fast CPU work)
+        for partial in stt_processor.process_audio_chunk(pcm_16khz):
             if partial["type"] == "partial":
                 logger.info(f"[{stream_sid}] Partial: {partial['text']}")
 

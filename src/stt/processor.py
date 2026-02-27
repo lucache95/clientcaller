@@ -8,7 +8,7 @@ Provides real-time streaming transcription with sub-200ms latency using:
 
 from .whisper_online import FasterWhisperASR, OnlineASRProcessor
 import numpy as np
-from typing import AsyncGenerator, Dict, Any
+from typing import Dict, Any, Generator
 import sys
 import platform
 
@@ -107,10 +107,10 @@ class STTProcessor:
         # Initialize online processor with LocalAgreement policy
         self.online = OnlineASRProcessor(self.asr)
 
-    async def process_audio_chunk(
+    def process_audio_chunk(
         self,
         pcm_16khz: np.ndarray
-    ) -> AsyncGenerator[Dict[str, Any], None]:
+    ):
         """
         Process incoming PCM 16kHz audio chunk and yield partial transcripts.
 
