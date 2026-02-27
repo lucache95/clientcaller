@@ -351,13 +351,15 @@ async def handle_media(websocket: WebSocket, data: dict):
         handle_media._debug_counter = {}
     handle_media._debug_counter[stream_sid] = handle_media._debug_counter.get(stream_sid, 0) + 1
     if handle_media._debug_counter[stream_sid] % 250 == 1:
+        import numpy as np
+        rms = np.sqrt(np.mean(pcm_16khz.astype(np.float64)**2))
         logger.info(
             f"[{stream_sid}] VAD debug: speech={vad_result['is_speech']}, "
             f"prob={vad_result['speech_probability']:.3f}, "
             f"speaking={vad_detector.is_speaking}, "
             f"silence={vad_result['silence_duration_ms']:.0f}ms, "
             f"speech_dur={vad_result['speech_duration_ms']:.0f}ms, "
-            f"pcm_len={len(pcm_16khz)}"
+            f"rms={rms:.0f}, min={pcm_16khz.min()}, max={pcm_16khz.max()}"
         )
 
     # Barge-in detection: user speaking while AI is responding

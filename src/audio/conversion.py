@@ -17,23 +17,17 @@ _MULAW_BIAS = 33
 _MULAW_MAX = 0x1FFF  # 8191
 
 def _build_mulaw_decode_table() -> np.ndarray:
-    """Build mu-law byte → int16 PCM lookup table."""
+    """Build mu-law byte → int16 PCM lookup table (ITU-T G.711)."""
     table = np.zeros(256, dtype=np.int16)
     for i in range(256):
-        # Complement the bits
         val = ~i & 0xFF
         sign = val & 0x80
         exponent = (val >> 4) & 0x07
         mantissa = val & 0x0F
-        # Decode
-        sample = (mantissa << (exponent + 3)) + _MULAW_BIAS
-        sample = sample << (exponent)
-        sample = sample - _MULAW_BIAS
-        if sign:
-            sample = -sample
-        # Clamp to int16 range
-        sample = max(-32768, min(32767, sample))
-        table[i] = sample
+        # ITU-T G.711 standard decode
+        magnitude = ((2 * mantissa + _MULAW_BIAS) << exponent) - _MULAW_BIAS
+        sample = -magnitude if sign else magnitude
+        table[i] = max(-32768, min(32767, sample))
     return table
 
 _MULAW_DECODE_TABLE = _build_mulaw_decode_table()
