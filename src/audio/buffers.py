@@ -3,8 +3,11 @@ Bidirectional audio streaming with backpressure handling.
 
 Prevents buffer overflow when TTS generates audio faster than network can transmit.
 Uses bounded queues with timeout to detect stalls.
+Always transmits at 20ms intervals — silence when idle, TTS audio when available.
+This keeps the Twilio media path established (both sides must send for RTP to flow).
 """
 import asyncio
+import base64
 import json
 import logging
 from asyncio import Queue
@@ -13,12 +16,16 @@ from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
 
+# 160 bytes of 0xFF mulaw = 20ms of silence at 8kHz mono
+_SILENCE_PAYLOAD = base64.b64encode(b'\xff' * 160).decode('utf-8')
+
+
 class AudioStreamer:
     """
     Manages bidirectional audio streaming for a single call.
 
-    Implements backpressure: if outbound queue is full, blocks producer
-    to prevent memory overflow.
+    Always transmits at 20ms intervals to keep the Twilio media path alive.
+    Sends TTS audio from the queue when available, silence otherwise.
     """
 
     def __init__(self, websocket: WebSocket, stream_sid: str):
@@ -60,13 +67,10 @@ class AudioStreamer:
             asyncio.TimeoutError: If can't queue within 1 second (stall detected)
         """
         try:
-            # This blocks if queue is full (backpressure)
             await asyncio.wait_for(
                 self.outbound_queue.put(audio_payload),
-                timeout=1.0  # Fail if can't queue within 1 second
+                timeout=1.0
             )
-            logger.debug(f"Queued audio chunk, queue depth: {self.outbound_queue.qsize()}")
-
         except asyncio.TimeoutError:
             logger.warning(
                 f"Audio queue full for stream {self.stream_sid}, dropping packet. "
@@ -85,17 +89,20 @@ class AudioStreamer:
 
     async def _send_loop(self):
         """
-        Background task to send queued audio to Twilio.
+        Background task: always transmit at 20ms intervals.
 
-        Sends at real-time rate (~20ms per chunk) to match playback speed
-        and prevent sending faster than Twilio can play.
+        Sends TTS audio from the queue when available, silence otherwise.
+        Continuous transmission keeps the Twilio bidirectional media path
+        established — without it, inbound audio arrives as all-silence.
         """
         while self.running:
             try:
-                # Get next audio chunk (blocks if empty)
-                payload = await self.outbound_queue.get()
+                # Send TTS audio if available, otherwise silence
+                try:
+                    payload = self.outbound_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    payload = _SILENCE_PAYLOAD
 
-                # Send to Twilio
                 message = {
                     "event": "media",
                     "streamSid": self.stream_sid,
@@ -104,10 +111,6 @@ class AudioStreamer:
                     }
                 }
                 await self.websocket.send_text(json.dumps(message))
-
-                # Small delay to match real-time playback rate
-                # Prevents sending faster than Twilio can play
-                # 20ms per chunk is typical for 8kHz audio
                 await asyncio.sleep(0.020)
 
             except asyncio.CancelledError:

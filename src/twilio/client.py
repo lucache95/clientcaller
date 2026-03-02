@@ -36,10 +36,8 @@ def generate_twiml(websocket_url: str) -> str:
         TwiML XML string
     """
     response = VoiceResponse()
-    # Brief pause to let call connect before streaming (no robot voice)
-    response.pause(length=1)
     connect = Connect()
-    stream = Stream(url=websocket_url, track="inbound_track")
+    stream = Stream(url=websocket_url)
     connect.append(stream)
     response.append(connect)
 
