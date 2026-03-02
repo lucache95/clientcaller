@@ -133,11 +133,12 @@ async def metrics_endpoint():
     return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain")
 
 
-@app.get("/twiml")
+@app.api_route("/twiml", methods=["GET", "POST"])
 async def twiml_endpoint(request: Request):
-    """Serve TwiML to establish Media Stream."""
+    """Serve TwiML to establish Media Stream (GET + POST for Twilio compatibility)."""
     host = request.headers.get("host", settings.server_host)
     websocket_url = f"wss://{host}/ws"
+    logger.info(f"TwiML requested via {request.method}, ws_url={websocket_url}")
     twiml = generate_twiml(websocket_url)
     return Response(content=twiml, media_type="application/xml")
 

@@ -148,12 +148,15 @@ async def handle_start(websocket: WebSocket, data: dict):
     call_sid = start_data.get("callSid")
     stream_sid = start_data.get("streamSid")
     media_format = start_data.get("mediaFormat", {})
+    tracks = start_data.get("tracks", [])
 
     temp_id = getattr(websocket.state, 'temp_id', id(websocket))
     ctx = await state_manager.on_start(temp_id, call_sid, stream_sid)
 
     logger.info(f"Stream started: {stream_sid}, Call: {call_sid}, State: {ctx.state.value}")
     logger.info(f"Media format: {media_format}")
+    logger.info(f"Tracks: {tracks}")
+    logger.info(f"Full start payload: {json.dumps(start_data)}")
 
     await manager.connect(call_sid, stream_sid, websocket)
 
@@ -314,6 +317,8 @@ async def handle_media(websocket: WebSocket, data: dict):
     payload = media_data.get("payload")
     stream_sid = data.get("streamSid")
 
+    media_track = media_data.get("track", "unknown")
+
     if not payload:
         logger.warning("Received media event with no payload")
         return
@@ -325,10 +330,20 @@ async def handle_media(websocket: WebSocket, data: dict):
     if not hasattr(handle_media, '_audio_debug_count'):
         handle_media._audio_debug_count = {}
     handle_media._audio_debug_count[stream_sid] = handle_media._audio_debug_count.get(stream_sid, 0) + 1
-    debug_audio = handle_media._audio_debug_count[stream_sid] <= 3
+    debug_audio = handle_media._audio_debug_count[stream_sid] <= 10
 
     if debug_audio:
-        logger.info(f"[{stream_sid}] RAW mulaw: {len(audio_mulaw)} bytes, first 10: {list(audio_mulaw[:10])}")
+        # Log raw base64 snippet to verify decode
+        logger.info(f"[{stream_sid}] chunk#{handle_media._audio_debug_count[stream_sid]} track={media_track} base64[0:40]={payload[:40]}")
+        # Log byte distribution — how many unique values and which ones
+        from collections import Counter
+        byte_counts = Counter(audio_mulaw)
+        unique_bytes = len(byte_counts)
+        top_bytes = byte_counts.most_common(5)
+        logger.info(
+            f"[{stream_sid}] mulaw: {len(audio_mulaw)}B, unique_values={unique_bytes}, "
+            f"top5={[(hex(b), c) for b, c in top_bytes]}, first10={[hex(b) for b in audio_mulaw[:10]]}"
+        )
 
     pcm_8khz = mulaw_to_pcm(audio_mulaw)
     if debug_audio:
@@ -338,6 +353,11 @@ async def handle_media(websocket: WebSocket, data: dict):
     pcm_16khz = resample_8k_to_16k(pcm_8khz)
     if debug_audio:
         logger.info(f"[{stream_sid}] PCM 16kHz: len={len(pcm_16khz)}, dtype={pcm_16khz.dtype}, min={pcm_16khz.min()}, max={pcm_16khz.max()}, rms={np.sqrt(np.mean(pcm_16khz.astype(np.float64)**2)):.1f}")
+
+    # When using both_tracks, only process inbound (caller) audio through VAD/STT
+    # Outbound audio is just for debugging — skip pipeline processing
+    if media_track == "outbound":
+        return
 
     # Get processors
     stt_processor = manager.get_stt_processor()
@@ -353,13 +373,18 @@ async def handle_media(websocket: WebSocket, data: dict):
     if handle_media._debug_counter[stream_sid] % 250 == 1:
         import numpy as np
         rms = np.sqrt(np.mean(pcm_16khz.astype(np.float64)**2))
+        # Also check byte distribution of this chunk
+        from collections import Counter
+        byte_counts = Counter(audio_mulaw)
+        unique_bytes = len(byte_counts)
         logger.info(
-            f"[{stream_sid}] VAD debug: speech={vad_result['is_speech']}, "
+            f"[{stream_sid}] VAD debug: track={media_track}, speech={vad_result['is_speech']}, "
             f"prob={vad_result['speech_probability']:.3f}, "
             f"speaking={vad_detector.is_speaking}, "
             f"silence={vad_result['silence_duration_ms']:.0f}ms, "
             f"speech_dur={vad_result['speech_duration_ms']:.0f}ms, "
-            f"rms={rms:.0f}, min={pcm_16khz.min()}, max={pcm_16khz.max()}"
+            f"rms={rms:.0f}, min={pcm_16khz.min()}, max={pcm_16khz.max()}, "
+            f"unique_mulaw_vals={unique_bytes}"
         )
 
     # Barge-in detection: user speaking while AI is responding
