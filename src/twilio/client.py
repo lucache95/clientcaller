@@ -36,9 +36,10 @@ def generate_twiml(websocket_url: str) -> str:
         TwiML XML string
     """
     response = VoiceResponse()
+    # Brief pause to let call connect before streaming (no robot voice)
+    response.pause(length=1)
     connect = Connect()
-    # Use both_tracks for debugging — see which track has audio
-    stream = Stream(url=websocket_url, track="both_tracks")
+    stream = Stream(url=websocket_url, track="inbound_track")
     connect.append(stream)
     response.append(connect)
 

@@ -354,11 +354,6 @@ async def handle_media(websocket: WebSocket, data: dict):
     if debug_audio:
         logger.info(f"[{stream_sid}] PCM 16kHz: len={len(pcm_16khz)}, dtype={pcm_16khz.dtype}, min={pcm_16khz.min()}, max={pcm_16khz.max()}, rms={np.sqrt(np.mean(pcm_16khz.astype(np.float64)**2)):.1f}")
 
-    # When using both_tracks, only process inbound (caller) audio through VAD/STT
-    # Outbound audio is just for debugging — skip pipeline processing
-    if media_track == "outbound":
-        return
-
     # Get processors
     stt_processor = manager.get_stt_processor()
     vad_detector = manager.get_vad_detector(stream_sid)
